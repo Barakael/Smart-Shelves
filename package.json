@@ -1,0 +1,17 @@
+{
+  "name": "smart-shelves",
+  "version": "1.0.0",
+  "description": "Smart Shelves Desktop Application",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "cd frontend && npm run tauri dev",
+    "desktop:dev": "cd frontend && npm run tauri dev",
+    "build": "cd frontend && npm run tauri build",
+    "backend:serve": "cd backend && php artisan serve",
+    "backend:migrate": "cd backend && php artisan migrate"
+  }
+}
+
