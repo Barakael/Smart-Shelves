@@ -64,7 +64,7 @@ const Login = () => {
                   transition={{ delay: 0.2 }}
                   className="text-4xl font-bold text-gray-900 dark:text-white mb-2"
                 >
-                  {isLogin ? 'Welcome Back' : 'Create Account'}
+                  {isLogin ? 'Welcome' : 'Create Account'}
                 </motion.h1>
                 <motion.p
                   initial={{ opacity: 0, y: -20 }}
@@ -221,7 +221,7 @@ const Login = () => {
                   transition={{ delay: 0.2 }}
                   className="text-5xl font-bold mb-4"
                 >
-                  {isLogin ? 'Hello, Friend!' : 'Welcome Back!'}
+                  {isLogin ? 'Hello..!' : 'Welcome Back!'}
                 </motion.h2>
                 <motion.p
                   initial={{ y: 20, opacity: 0 }}
