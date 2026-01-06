@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, Trash2, DoorOpen, X, Save, Settings, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -22,6 +23,8 @@ interface Panel {
 
 const Rooms = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [rooms, setRooms] = useState<Room[]>([]);
   const [panels, setPanels] = useState<Record<number, Panel[]>>({});
   const [expandedRooms, setExpandedRooms] = useState<Set<number>>(new Set());
@@ -165,17 +168,21 @@ const Rooms = () => {
       >
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Rooms</h1>
-          <p className="text-gray-600 dark:text-gray-400">Manage rooms and assign operators</p>
+          <p className="text-gray-600 dark:text-gray-400">
+            {isAdmin ? 'Manage rooms and assign operators' : 'View your assigned room and manage panels'}
+          </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => handleOpenModal()}
-          className="px-6 py-3 bg-[#012169] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center space-x-2"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Add Room</span>
-        </motion.button>
+        {isAdmin && (
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => handleOpenModal()}
+            className="px-6 py-3 bg-[#012169] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center space-x-2"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Add Room</span>
+          </motion.button>
+        )}
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -256,25 +263,27 @@ const Rooms = () => {
               )}
             </AnimatePresence>
 
-            <div className="flex space-x-2">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleOpenModal(room)}
-                className="flex-1 px-4 py-2 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors flex items-center justify-center space-x-2"
-              >
-                <Edit className="w-4 h-4" />
-                <span>Edit</span>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => handleDelete(room.id)}
-                className="px-4 py-2 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </motion.button>
-            </div>
+            {isAdmin && (
+              <div className="flex space-x-2">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleOpenModal(room)}
+                  className="flex-1 px-4 py-2 bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span>Edit</span>
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleDelete(room.id)}
+                  className="px-4 py-2 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </motion.button>
+              </div>
+            )}
           </motion.div>
         ))}
       </div>
