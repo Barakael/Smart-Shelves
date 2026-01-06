@@ -120,27 +120,13 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
     }
 
     try {
-      // Calculate which shelves need to be pushed
-      const direction = panelOpenDirection;
-      const shelvesToPush: number[] = [];
-      
-      if (direction === 'right') {
-        // If opening to the right, push all shelves to the right of the opening shelf
-        for (let i = shelfIndex + 1; i < shelves.length; i++) {
-          shelvesToPush.push(i);
-        }
-      } else {
-        // If opening to the left, push all shelves to the left of the opening shelf
-        for (let i = shelfIndex - 1; i >= 0; i--) {
-          shelvesToPush.push(i);
-        }
-      }
-
-      // Add the opening shelf to open set
+      // Mark this shelf as open; neighbors will be nudged slightly automatically
       setOpenShelves(prev => new Set(prev).add(shelfIndex));
       
-      // API call would go here
-      // await axios.post(`${API_URL}/rooms/${roomId}/panels/${panel.id}/shelves/${shelf.id}/open`);
+      const shelf = shelves[shelfIndex];
+      if (shelf?.id) {
+        await axios.post(`${API_URL}/rooms/${roomId}/panels/${panel.id}/shelves/${shelf.id}/open`);
+      }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Failed to open shelf');
       setOpenShelves(prev => {
@@ -158,7 +144,10 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
         newSet.delete(shelfIndex);
         return newSet;
       });
-      // API call would go here
+      const shelf = shelves[shelfIndex];
+      if (shelf?.id) {
+        await axios.post(`${API_URL}/rooms/${roomId}/panels/${panel.id}/shelves/${shelf.id}/close`);
+      }
     } catch (error: any) {
       alert(error.response?.data?.message || 'Failed to close shelf');
       setOpenShelves(prev => new Set(prev).add(shelfIndex));
@@ -198,26 +187,63 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
     }
   };
 
-  const calculatePushDistance = (shelfIndex: number, direction: 'left' | 'right') => {
-    if (!openShelves.has(shelfIndex)) return 0;
+  // Auto direction: shelves open away from the controller's position
+  const getControllerIndex = () => (controllerShelf ? controllerShelf.column_index : 0);
+  const getShelfDirection = (shelfIndex: number): 'left' | 'right' | 'none' => {
+    const ctrl = getControllerIndex();
+    if (shelfIndex === ctrl) return 'none';
+    return shelfIndex > ctrl ? 'right' : 'left';
+  };
+
+  // Smaller open distance to fit on screen with up to 14 shelves
+  const OPEN_DISTANCE = 60; // px
+
+  // Calculate padding needed to prevent overflow
+  const getContainerPadding = () => {
+    if (!controllerShelf) return { paddingLeft: '16px', paddingRight: '16px' };
     
-    // Count how many shelves are open in the push direction
-    let pushCount = 0;
-    if (direction === 'right') {
-      // Count open shelves to the left (they push this one)
-      for (let i = 0; i < shelfIndex; i++) {
-        if (openShelves.has(i)) pushCount++;
+    const ctrlIdx = controllerShelf.column_index;
+    const totalColumns = panel.columns;
+    
+    // Count shelves on each side of controller
+    const shelvesToLeft = ctrlIdx;
+    const shelvesToRight = totalColumns - ctrlIdx - 1;
+    
+    // Calculate max possible translation (all shelves open)
+    const maxLeftTranslation = shelvesToLeft * OPEN_DISTANCE;
+    const maxRightTranslation = shelvesToRight * OPEN_DISTANCE;
+    
+    return {
+      paddingLeft: `${maxLeftTranslation + 32}px`,
+      paddingRight: `${maxRightTranslation + 32}px`,
+    };
+  };
+
+  const getShelfTranslation = (shelfIndex: number) => {
+    const ctrlIdx = getControllerIndex();
+    if (shelfIndex === ctrlIdx) return 0; // Controller never moves
+
+    let translation = 0;
+    const dir = getShelfDirection(shelfIndex);
+
+    // Accumulate push from all open shelves between this shelf and controller
+    if (dir === 'right') {
+      // Shelf is to the right of controller, pushed by all open shelves to its left
+      for (let i = ctrlIdx; i < shelfIndex; i++) {
+        if (openShelves.has(i)) translation += OPEN_DISTANCE;
       }
-    } else {
-      // Count open shelves to the right (they push this one)
-      for (let i = shelfIndex + 1; i < shelves.length; i++) {
-        if (openShelves.has(i)) pushCount++;
+      // If this shelf itself is open, add its own distance
+      if (openShelves.has(shelfIndex)) translation += OPEN_DISTANCE;
+    } else if (dir === 'left') {
+      // Shelf is to the left of controller, pushed by all open shelves to its right
+      for (let i = shelfIndex + 1; i <= ctrlIdx; i++) {
+        if (openShelves.has(i)) translation -= OPEN_DISTANCE;
       }
+      // If this shelf itself is open, add its own distance
+      if (openShelves.has(shelfIndex)) translation -= OPEN_DISTANCE;
     }
-    
-    // Each open shelf creates space, so we push by that amount
-    // Plus one extra space for the opening shelf itself
-    return pushCount * 60 + (openShelves.has(shelfIndex) ? 60 : 0);
+
+    return translation;
   };
 
   return (
@@ -261,33 +287,28 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
               )}
             </div>
             <div className="flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-gray-800/50 rounded-lg">
-              {panelOpenDirection === 'right' ? (
-                <ChevronRight className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-              ) : (
-                <ChevronLeft className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-              )}
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
-                Opens {panelOpenDirection}
+              <ChevronLeft className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+              <ChevronRight className="w-4 h-4 text-gray-700 dark:text-gray-300" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Opens away from controller
               </span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Shelves Grid with Extra Space */}
-      <div className="relative">
-        {/* Extra space indicator */}
-        <div className="absolute -right-16 top-0 bottom-0 w-16 bg-gray-100 dark:bg-gray-800 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-r-xl flex items-center justify-center">
-          <div className="text-xs text-gray-500 dark:text-gray-400 text-center rotate-90 whitespace-nowrap">
-            Extra Space
-          </div>
-        </div>
-
-        <div className="grid gap-4 pr-20" style={{ gridTemplateColumns: `repeat(${panel.columns}, minmax(0, 1fr))` }}>
+      {/* Shelves Grid */}
+      <div className="relative overflow-visible rounded-xl p-2">
+        <div 
+          className="grid gap-2" 
+          style={{ 
+            gridTemplateColumns: `repeat(${panel.columns}, minmax(0, 1fr))`,
+            ...getContainerPadding(),
+          }}
+        >
           {shelves.map((shelf, index) => {
             const isOpen = openShelves.has(index);
-            const direction = panelOpenDirection;
-            const pushDistance = calculatePushDistance(index, direction);
+            const translateX = getShelfTranslation(index);
 
             return (
               <motion.div
@@ -299,13 +320,13 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
               >
                 <motion.div
                   animate={{
-                    x: direction === 'right' ? pushDistance : -pushDistance,
+                    x: translateX,
                   }}
-                  transition={{ duration: 3, ease: 'easeInOut' }}
+                  transition={{ duration: 2, ease: 'easeInOut' }}
                   className={`
-                    relative bg-gradient-to-br from-[#012169] to-[#011a54] rounded-xl p-4 shadow-xl
+                    relative bg-gradient-to-br from-[#012169] to-[#011a54] rounded-xl p-3 shadow-xl
                     border-2 ${shelf.is_controller ? 'border-yellow-400' : 'border-primary-300'}
-                    min-h-[200px] flex flex-col
+                    min-h-[180px] flex flex-col ${isOpen ? 'z-10' : ''}
                   `}
                 >
                   {/* Controller Badge */}
@@ -319,12 +340,12 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
                   )}
 
                   {/* Shelf Number */}
-                  <div className="text-center mb-3">
-                    <div className="text-3xl font-bold text-white mb-1">
+                  <div className="text-center mb-2">
+                    <div className="text-2xl font-bold text-white mb-1">
                       {shelf.shelf_number || index + 1}
                     </div>
                     {shelf.is_controller && (
-                      <div className="text-xs text-primary-200">
+                      <div className="text-xs text-primary-200 truncate">
                         {shelf.name}
                       </div>
                     )}
@@ -347,9 +368,9 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleShelfOpen(index)}
                         disabled={!controllerShelf?.ip_address}
-                        className="w-full py-2.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold shadow-lg transition-all flex items-center justify-center gap-2"
+                        className="w-full py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold shadow-lg transition-all flex items-center justify-center gap-1 text-sm"
                       >
-                        <Play className="w-4 h-4" />
+                        <Play className="w-3 h-3" />
                         Open
                       </motion.button>
                     ) : (
@@ -357,9 +378,9 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleShelfClose(index)}
-                        className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold shadow-lg transition-all flex items-center justify-center gap-2"
+                        className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold shadow-lg transition-all flex items-center justify-center gap-1 text-sm"
                       >
-                        <Square className="w-4 h-4" />
+                        <Square className="w-3 h-3" />
                         Close
                       </motion.button>
                     )}

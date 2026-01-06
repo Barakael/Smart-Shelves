@@ -8,6 +8,8 @@ import ShelvesConfig from './pages/ShelvesConfig';
 import Rooms from './pages/Rooms';
 import PanelConfig from './pages/PanelConfig';
 import History from './pages/History';
+import Settings from './pages/Settings';
+import Users from './pages/Users';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -31,6 +33,8 @@ function App() {
               <Route path="rooms" element={<Rooms />} />
               <Route path="rooms/:roomId/panels/:panelId" element={<PanelConfig />} />
               <Route path="history" element={<History />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="users" element={<Users />} />
             </Route>
           </Routes>
         </Router>
