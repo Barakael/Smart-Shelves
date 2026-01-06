@@ -5,16 +5,21 @@ use App\Http\Controllers\RoomController;
 use App\Http\Controllers\ShelfController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\ActionLogController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
+    Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     Route::apiResource('shelves', ShelfController::class);
     Route::apiResource('rooms', RoomController::class);
+    
+    // User management (admin only)
+    Route::apiResource('users', UserController::class);
     
     // Panel routes nested under rooms
     Route::prefix('rooms/{roomId}')->group(function () {
