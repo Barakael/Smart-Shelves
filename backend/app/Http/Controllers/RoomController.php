@@ -14,7 +14,8 @@ class RoomController extends Controller
         if ($user->isAdmin()) {
             $rooms = Room::all();
         } else {
-            $rooms = $user->rooms;
+            // Operators only see their assigned room
+            $rooms = $user->room ? collect([$user->room]) : collect([]);
         }
 
         return response()->json($rooms);
@@ -37,7 +38,7 @@ class RoomController extends Controller
         $room = Room::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -49,7 +50,7 @@ class RoomController extends Controller
         $room = Room::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -68,7 +69,8 @@ class RoomController extends Controller
         $room = Room::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        // Only admins can delete rooms
+        if (!$user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 

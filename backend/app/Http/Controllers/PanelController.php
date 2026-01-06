@@ -17,7 +17,7 @@ class PanelController extends Controller
         $room = Room::findOrFail($roomId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -31,7 +31,7 @@ class PanelController extends Controller
         $room = Room::findOrFail($roomId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -63,7 +63,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($id);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -78,7 +78,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($id);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -110,7 +110,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($id);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -136,7 +136,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($id);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -163,7 +163,7 @@ class PanelController extends Controller
         $shelf = Shelf::where('panel_id', $panelId)->findOrFail($shelfId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -197,7 +197,7 @@ class PanelController extends Controller
         $shelf = Shelf::where('panel_id', $panelId)->findOrFail($shelfId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -229,7 +229,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($panelId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -267,7 +267,7 @@ class PanelController extends Controller
         $panel = Panel::where('room_id', $roomId)->findOrFail($panelId);
 
         // Check access
-        if ($user->isOperator() && !$user->rooms->contains($room->id)) {
+        if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
