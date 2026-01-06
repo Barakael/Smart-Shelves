@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Boxes, DoorOpen, History } from 'lucide-react';
+import { LayoutDashboard, Boxes, DoorOpen, History, Users, Settings } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -13,6 +13,8 @@ const Sidebar = () => {
     { icon: Boxes, label: 'Shelves Config', path: '/shelves' },
     ...(user?.role === 'admin' ? [{ icon: DoorOpen, label: 'Rooms', path: '/rooms' }] : []),
     { icon: History, label: 'History', path: '/history' },
+    { icon: Settings, label: 'Settings', path: '/settings' },
+    ...(user?.role === 'admin' ? [{ icon: Users, label: 'Users', path: '/users' }] : []),
   ];
 
   return (

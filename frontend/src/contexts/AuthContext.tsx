@@ -9,7 +9,9 @@ interface User {
   id: number;
   name: string;
   email: string;
+  phone?: string | null;
   role: UserRole;
+  room_id?: number | null;
   rooms?: number[];
 }
 
@@ -18,6 +20,7 @@ interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -79,6 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         login,
         logout,
+        refreshUser: fetchUser,
         isAuthenticated: !!user,
         isLoading,
       }}
