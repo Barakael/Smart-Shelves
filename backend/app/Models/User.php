@@ -14,8 +14,10 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',
         'password',
         'role',
+        'room_id',
     ];
 
     protected $hidden = [
@@ -31,6 +33,11 @@ class User extends Authenticatable
     public function rooms()
     {
         return $this->belongsToMany(Room::class, 'user_rooms');
+    }
+
+    public function room()
+    {
+        return $this->belongsTo(Room::class);
     }
 
     public function isAdmin(): bool
