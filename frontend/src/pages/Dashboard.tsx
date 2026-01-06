@@ -1,17 +1,137 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Boxes, Activity, Users, Settings } from 'lucide-react';
+import { Boxes, Activity, Users as UsersIcon, Settings } from 'lucide-react';
+import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import PanelGrid from '../components/PanelGrid';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+interface Room {
+  id: number;
+  name: string;
+  description?: string;
+}
+
+interface Panel {
+  id: number;
+  name: string;
+  rows: number;
+  columns: number;
+  room_id: number;
+}
 
 const Dashboard = () => {
   const { user } = useAuth();
 
+  const [room, setRoom] = useState<Room | null>(null);
+  const [panels, setPanels] = useState<Panel[]>([]);
+  const [selectedPanelId, setSelectedPanelId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   const stats = [
     { icon: Boxes, label: 'Total Shelves', value: '24', bgColor: 'bg-primary-200 dark:bg-primary-900/50', iconColor: 'text-[#012169] dark:text-primary-300' },
     { icon: Activity, label: 'Active Shelves', value: '18', bgColor: 'bg-primary-200 dark:bg-primary-900/50', iconColor: 'text-[#012169] dark:text-primary-300' },
-    { icon: Users, label: 'Operators', value: '5', bgColor: 'bg-primary-200 dark:bg-primary-900/50', iconColor: 'text-[#012169] dark:text-primary-300' },
+    { icon: UsersIcon, label: 'Operators', value: '5', bgColor: 'bg-primary-200 dark:bg-primary-900/50', iconColor: 'text-[#012169] dark:text-primary-300' },
     { icon: Settings, label: 'Rooms', value: '8', bgColor: 'bg-primary-200 dark:bg-primary-900/50', iconColor: 'text-[#012169] dark:text-primary-300' },
   ];
 
+  useEffect(() => {
+    if (user?.role === 'operator' && user.room_id) {
+      loadOperatorRoom(user.room_id);
+    }
+  }, [user?.role, user?.room_id]);
+
+  const loadOperatorRoom = async (roomId: number) => {
+    setIsLoading(true);
+    try {
+      const [roomRes, panelsRes] = await Promise.all([
+        axios.get(`${API_URL}/rooms/${roomId}`),
+        axios.get(`${API_URL}/rooms/${roomId}/panels`),
+      ]);
+      setRoom(roomRes.data);
+      setPanels(panelsRes.data);
+      setSelectedPanelId(panelsRes.data[0]?.id ?? null);
+    } catch (err) {
+      console.error('Failed to load operator room:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Operator view: show assigned room with panel tabs
+  if (user?.role === 'operator') {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-800"></div>
+        </div>
+      );
+    }
+
+    if (!user.room_id) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">No Room Assigned</h2>
+            <p className="text-gray-600 dark:text-gray-400">Please contact your administrator to assign a room.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex items-center justify-between"
+        >
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">{room?.name || 'Room'}</h1>
+            <p className="text-gray-600 dark:text-gray-400">Manage your room's panels and shelves</p>
+          </div>
+        </motion.div>
+
+        {/* Panel Tabs */}
+        <div className="bg-white/90 dark:bg-gray-900/90 rounded-xl border border-primary-300/50 dark:border-primary-800/50 shadow-lg">
+          <div className="flex border-b border-primary-200/50 dark:border-primary-800/50 overflow-x-auto">
+            {panels.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPanelId(p.id)}
+                className={`px-4 py-3 text-sm font-medium transition-colors ${
+                  selectedPanelId === p.id
+                    ? 'text-white bg-[#012169]'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-primary-100 dark:hover:bg-primary-900/30'
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+            {panels.length === 0 && (
+              <div className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">No panels in this room</div>
+            )}
+          </div>
+
+          {/* Selected Panel Content */}
+          <div className="p-6">
+            {selectedPanelId ? (
+              <PanelGrid
+                panel={panels.find((p) => p.id === selectedPanelId)!}
+                roomId={room!.id}
+              />
+            ) : (
+              <div className="text-center py-12 text-gray-600 dark:text-gray-400">Select a panel to view shelves</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin view: keep stats and recent activity
   return (
     <div className="space-y-6">
       <motion.div
