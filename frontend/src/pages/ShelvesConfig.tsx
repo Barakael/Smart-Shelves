@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import axios from 'axios';
-import ShelfSimulation from '../components/ShelfSimulation';
+
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -117,8 +117,7 @@ const ShelvesConfig = () => {
         </motion.button>
       </motion.div>
 
-      <ShelfSimulation initialCount={11} />
-
+      
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {shelves.map((shelf, index) => (
           <motion.div
