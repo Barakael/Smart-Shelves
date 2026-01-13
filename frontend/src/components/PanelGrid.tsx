@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Crown, Play, Square, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Settings, Crown, Play, Square, ChevronRight, ChevronLeft, Wifi, WifiOff } from 'lucide-react';
 import axios from 'axios';
+import { useSocket } from '../contexts/SocketContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -39,10 +40,38 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
   const [controllerShelf, setControllerShelf] = useState<Shelf | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [panelOpenDirection, setPanelOpenDirection] = useState<'left' | 'right'>('right');
+  const { isConnected, lastEvent, subscribe, unsubscribe } = useSocket();
 
   useEffect(() => {
     fetchShelves();
   }, [panel.id]);
+
+  // Subscribe to panel closed events
+  useEffect(() => {
+    const channel = `panel.${panel.id}.closed`;
+    subscribe(channel, handlePanelClosedEvent);
+
+    return () => {
+      unsubscribe(channel);
+    };
+  }, [panel.id, shelves]);
+
+  // Handle real-time panel closure notifications
+  const handlePanelClosedEvent = (event: any) => {
+    const { shelf_id, cabinet_id, panel_id } = event;
+    
+    if (panel_id === panel.id) {
+      // Find shelf by ID and close it
+      const shelfIndex = shelves.findIndex(s => s.id === shelf_id);
+      if (shelfIndex !== -1) {
+        setOpenShelves(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(shelfIndex);
+          return newSet;
+        });
+      }
+    }
+  };
 
   const fetchShelves = async () => {
     try {
@@ -255,15 +284,30 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
             {panel.columns} shelves • Only controller needs configuration
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setIsConfigModalOpen(true)}
-          className="px-4 py-2 bg-[#012169] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center gap-2"
-        >
-          <Settings className="w-5 h-5" />
-          Configure Controller
-        </motion.button>
+        <div className="flex items-center gap-3">
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-lg ${isConnected ? 'bg-green-100 dark:bg-green-900/20' : 'bg-red-100 dark:bg-red-900/20'}`}>
+            {isConnected ? (
+              <>
+                <Wifi className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm font-medium text-green-600 dark:text-green-400">Connected</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-red-600 dark:text-red-400" />
+                <span className="text-sm font-medium text-red-600 dark:text-red-400">Offline</span>
+              </>
+            )}
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setIsConfigModalOpen(true)}
+            className="px-4 py-2 bg-[#012169] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center gap-2"
+          >
+            <Settings className="w-5 h-5" />
+            Configure Controller
+          </motion.button>
+        </div>
       </div>
 
       {/* Controller Info */}
