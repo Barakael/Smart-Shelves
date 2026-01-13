@@ -62,12 +62,12 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             initial={{ rotate: -180, opacity: 0 }}
             animate={{ rotate: 0, opacity: 1 }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
-            className="w-48 h-48 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/30 flex items-center justify-center shadow-2xl overflow-hidden"
+            className="w-48 h-36 rounded-full bg-white/10 backdrop-blur-md border-2 border-blue-900 flex items-center justify-center shadow-2xl overflow-hidden"
           >
             <img
               src={teraLogo}
               alt="TERA Logo"
-              className="w-44 h-44 object-cover rounded-full"
+              className="w-48 h-36 object-cover rounded-full"
             />
           </motion.div>
           <motion.h1
