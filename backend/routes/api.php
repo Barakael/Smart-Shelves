@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RoomController;
 use App\Http\Controllers\ShelfController;
 use App\Http\Controllers\PanelController;
+use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\ActionLogController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,16 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('shelves', ShelfController::class);
     Route::apiResource('rooms', RoomController::class);
+    
+    // Cabinet routes
+    Route::get('/cabinets', [CabinetController::class, 'index']);
+    Route::post('/cabinets', [CabinetController::class, 'store']);
+    Route::post('/cabinets/test-connection', [CabinetController::class, 'testConnection']);
+    Route::get('/cabinets/{cabinet}', [CabinetController::class, 'show']);
+    Route::get('/cabinets/{cabinet}/status', [CabinetController::class, 'status']);
+    Route::put('/cabinets/{cabinet}', [CabinetController::class, 'update']);
+    Route::delete('/cabinets/{cabinet}', [CabinetController::class, 'destroy']);
+    Route::get('/rooms/{room}/cabinets', [CabinetController::class, 'getByRoom']);
     
     // User management (admin only)
     Route::apiResource('users', UserController::class);
