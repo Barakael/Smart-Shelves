@@ -17,6 +17,7 @@ class Shelf extends Model
         'controller',
         'room_id',
         'panel_id',
+        'cabinet_id',
         'row_index',
         'column_index',
         'is_controller',
@@ -45,6 +46,11 @@ class Shelf extends Model
     public function panel()
     {
         return $this->belongsTo(Panel::class);
+    }
+
+    public function cabinet()
+    {
+        return $this->belongsTo(Cabinet::class);
     }
 }
 
