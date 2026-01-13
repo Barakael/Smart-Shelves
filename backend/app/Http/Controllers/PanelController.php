@@ -6,6 +6,7 @@ use App\Models\Panel;
 use App\Models\Room;
 use App\Models\Shelf;
 use App\Models\ActionLog;
+use App\Services\CabinetSocketService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -167,6 +168,19 @@ class PanelController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // If shelf has a cabinet, send TCP command
+        if ($shelf->cabinet_id) {
+            try {
+                $cabinet = $shelf->cabinet;
+                CabinetSocketService::sendOpenCommand($cabinet, $shelf->column_index);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'message' => 'Failed to send open command to cabinet',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
+        }
+
         $shelf->update(['is_open' => true]);
 
         // Log action
@@ -175,10 +189,12 @@ class PanelController extends Controller
             'room_id' => $room->id,
             'panel_id' => $panel->id,
             'shelf_id' => $shelf->id,
+            'cabinet_id' => $shelf->cabinet_id,
             'action_type' => 'open_shelf',
             'payload' => [
                 'shelf_number' => $shelf->shelf_number,
                 'direction' => $shelf->open_direction,
+                'cabinet_id' => $shelf->cabinet_id,
             ],
             'description' => "Opened shelf {$shelf->shelf_number} ({$shelf->name}) in panel '{$panel->name}'",
         ]);
@@ -209,9 +225,11 @@ class PanelController extends Controller
             'room_id' => $room->id,
             'panel_id' => $panel->id,
             'shelf_id' => $shelf->id,
+            'cabinet_id' => $shelf->cabinet_id,
             'action_type' => 'close_shelf',
             'payload' => [
                 'shelf_number' => $shelf->shelf_number,
+                'cabinet_id' => $shelf->cabinet_id,
             ],
             'description' => "Closed shelf {$shelf->shelf_number} ({$shelf->name}) in panel '{$panel->name}'",
         ]);

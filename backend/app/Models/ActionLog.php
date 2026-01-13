@@ -14,6 +14,7 @@ class ActionLog extends Model
         'room_id',
         'panel_id',
         'shelf_id',
+        'cabinet_id',
         'action_type',
         'payload',
         'description',
@@ -41,6 +42,11 @@ class ActionLog extends Model
     public function shelf()
     {
         return $this->belongsTo(Shelf::class);
+    }
+
+    public function cabinet()
+    {
+        return $this->belongsTo(Cabinet::class);
     }
 }
 
