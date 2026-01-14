@@ -19,6 +19,11 @@ class Cabinet extends Model
         'port',
         'function_byte',
         'checksum_offset',
+        'shelf_count',
+        'total_rows',
+        'total_columns',
+        'controller_row',
+        'controller_column',
         'room_id',
         'is_active',
     ];
@@ -32,6 +37,11 @@ class Cabinet extends Model
         'is_active' => 'boolean',
         'port' => 'integer',
         'checksum_offset' => 'integer',
+        'shelf_count' => 'integer',
+        'total_rows' => 'integer',
+        'total_columns' => 'integer',
+        'controller_row' => 'integer',
+        'controller_column' => 'integer',
     ];
 
     /**

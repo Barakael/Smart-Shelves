@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\Cabinet;
+use App\Models\Shelf;
+use App\Support\HexCommandFormatter;
 use Illuminate\Support\Facades\Log;
 use Exception;
 
@@ -56,6 +58,48 @@ class CabinetSocketService
     }
 
     /**
+     * Send a shelf-specific command. When a custom hex command is provided on the shelf,
+     * it is used directly; otherwise the default open command is generated.
+     */
+    public static function sendShelfCommand(Shelf $shelf, string $operation = 'open'): bool
+    {
+        $cabinet = $shelf->cabinet;
+
+        if (!$cabinet) {
+            throw new Exception('Shelf is not linked to a cabinet controller.');
+        }
+
+        $command = $operation === 'close' ? $shelf->close_command : $shelf->open_command;
+
+        if ($command) {
+            return self::sendHexString($cabinet, $command);
+        }
+
+        if ($operation === 'close') {
+            Log::info('No close command specified for shelf; skipping TCP command', [
+                'shelf_id' => $shelf->id,
+                'cabinet_id' => $cabinet->id,
+            ]);
+            return true;
+        }
+
+        $panelId = (int) ($shelf->column_index ?? 0);
+        $panelId = max(1, $panelId + 1);
+
+        return self::sendOpenCommand($cabinet, $panelId);
+    }
+
+    /**
+     * Send a manual hex command string to the cabinet.
+     */
+    public static function sendHexString(Cabinet $cabinet, string $hexCommand): bool
+    {
+        $packet = HexCommandFormatter::toBinary($hexCommand);
+
+        return self::sendPacket($cabinet, $packet);
+    }
+
+    /**
      * Build a hex packet for sending to the cabinet.
      * 
      * @param int $functionByte
@@ -65,6 +109,10 @@ class CabinetSocketService
      */
     private static function buildPacket(int $functionByte, int $panelId, int $checksumOffset): string
     {
+        if ($panelId < 0 || $panelId > 255) {
+            throw new Exception('Panel ID must be between 0 and 255.');
+        }
+
         $checksum = $panelId + $checksumOffset;
 
         return chr(self::HEADER) .
