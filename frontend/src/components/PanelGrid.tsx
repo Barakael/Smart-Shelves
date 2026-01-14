@@ -330,7 +330,7 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+            <div className="flex items-center gap-2 px-3 py-1 bg-white/50 dark:bg-gray-900/50 rounded-lg">
               <ChevronLeft className="w-4 h-4 text-gray-700 dark:text-gray-300" />
               <ChevronRight className="w-4 h-4 text-gray-700 dark:text-gray-300" />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
