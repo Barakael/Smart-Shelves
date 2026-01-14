@@ -235,7 +235,7 @@ const Users = () => {
                   key={user.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                  className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -339,7 +339,7 @@ const Users = () => {
                   </h2>
                   <button
                     onClick={handleCloseModal}
-                    className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                    className="p-2 text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-900 rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -360,7 +360,7 @@ const Users = () => {
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       required
                     />
                   </div>
@@ -373,7 +373,7 @@ const Users = () => {
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       required
                     />
                   </div>
@@ -387,7 +387,7 @@ const Users = () => {
                         type={showPassword ? 'text' : 'password'}
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 pr-10"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 pr-10"
                         required={!editingUser}
                         minLength={6}
                       />
@@ -408,7 +408,7 @@ const Users = () => {
                     <select
                       value={formData.role}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'operator' })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       required
                     >
                       <option value="operator">Operator</option>
@@ -424,7 +424,7 @@ const Users = () => {
                       <select
                         value={formData.room_id || ''}
                         onChange={(e) => setFormData({ ...formData, room_id: e.target.value ? Number(e.target.value) : null })}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       >
                         <option value="">No Room Assigned</option>
                         {rooms.map((room) => (
@@ -443,7 +443,7 @@ const Users = () => {
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                      className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                     >
                       Cancel
                     </button>
