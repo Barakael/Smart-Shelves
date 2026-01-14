@@ -71,7 +71,7 @@ const History = () => {
       case 'config_change':
         return 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300';
       default:
-        return 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300';
+        return 'bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-300';
     }
   };
 
