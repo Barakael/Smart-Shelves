@@ -92,7 +92,7 @@ const Login = () => {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required={!isLogin}
-                        className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
+                        className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
                         placeholder="Full Name"
                       />
                     </div>
@@ -111,7 +111,7 @@ const Login = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
+                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
                       placeholder="Email"
                     />
                   </div>
@@ -129,7 +129,7 @@ const Login = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
+                      className="w-full pl-12 pr-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:border-[#012169] focus:ring-2 focus:ring-primary-300 dark:focus:ring-primary-700 transition-all"
                       placeholder="Password"
                     />
                   </div>
