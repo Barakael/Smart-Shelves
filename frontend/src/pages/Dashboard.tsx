@@ -4,8 +4,9 @@ import { Boxes, Activity, Users as UsersIcon, Settings } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import PanelGrid from '../components/PanelGrid';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 interface Room {
   id: number;

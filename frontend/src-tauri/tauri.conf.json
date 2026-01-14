@@ -20,7 +20,7 @@
       "http": {
         "all": true,
         "request": true,
-        "scope": ["http://localhost:8000/**", "https://**"]
+        "scope": ["http://localhost:8765/**", "http://localhost:8000/**", "https://**"]
       }
     },
     "bundle": {
@@ -33,6 +33,9 @@
         "icons/128x128@2x.png",
         "icons/icon.icns",
         "icons/icon.ico"
+      ],
+      "resources": [
+        "resources/php-server/**"
       ]
     },
     "security": {

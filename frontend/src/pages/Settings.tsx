@@ -5,8 +5,9 @@ import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cabinet, Shelf, Room } from '../types/cabinet';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 const getTabFromSearch = (search: string): 'personal' | 'configurations' =>
   new URLSearchParams(search).get('tab') === 'configurations' ? 'configurations' : 'personal';
@@ -282,6 +283,18 @@ function ConfigurationsTab() {
     open_command: '',
     close_command: '',
   });
+  const macroFields = {
+    macro_close_command: { label: 'Close Rail', placeholder: '68 04 09 00 00 00' },
+    macro_lock_command: { label: 'Lock Rail', placeholder: '68 04 10 00 00 00' },
+    macro_vent_command: { label: 'Ventilate', placeholder: '68 04 11 00 00 00' },
+  } as const;
+  type MacroFormKey = keyof typeof macroFields;
+  const [macroFormData, setMacroFormData] = useState<Record<MacroFormKey, string>>({
+    macro_close_command: '',
+    macro_lock_command: '',
+    macro_vent_command: '',
+  });
+  const [isSavingMacros, setIsSavingMacros] = useState(false);
 
   const plannedShelfCount = Number(formData.shelf_count) || 0;
   const plannedRowCount = Number(formData.total_rows) || 0;
@@ -307,6 +320,13 @@ function ConfigurationsTab() {
     }
     return parseInt(sanitized, 16);
   };
+
+  const sanitizeMacroHexInput = (value: string) =>
+    value
+      .replace(/[^0-9a-fA-F\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
 
   const clearAlerts = () => {
     setMessage(null);
@@ -382,6 +402,22 @@ function ConfigurationsTab() {
     if (!selectedCabinetId) return null;
     return cabinets.find(cab => cab.id === selectedCabinetId) || null;
   }, [cabinets, selectedCabinetId]);
+
+  useEffect(() => {
+    if (selectedCabinet) {
+      setMacroFormData({
+        macro_close_command: selectedCabinet.macro_close_command || '',
+        macro_lock_command: selectedCabinet.macro_lock_command || '',
+        macro_vent_command: selectedCabinet.macro_vent_command || '',
+      });
+    } else {
+      setMacroFormData({
+        macro_close_command: '',
+        macro_lock_command: '',
+        macro_vent_command: '',
+      });
+    }
+  }, [selectedCabinet]);
 
   const getRoomName = (roomId: number) => rooms.find(r => r.id === roomId)?.name || 'Unknown Room';
 
@@ -620,6 +656,42 @@ function ConfigurationsTab() {
       setManualCommandError(apiMessage || 'Failed to send command');
     } finally {
       setSendingManualCommand(false);
+    }
+  };
+
+  const handleMacroInputChange = (field: MacroFormKey, value: string) => {
+    setMacroFormData(prev => ({
+      ...prev,
+      [field]: value === '' ? '' : sanitizeMacroHexInput(value),
+    }));
+  };
+
+  const handleMacroSave = async () => {
+    if (!selectedCabinet) {
+      return;
+    }
+    clearAlerts();
+    setIsSavingMacros(true);
+    try {
+      const payload: Record<MacroFormKey, string | null> = {
+        macro_close_command: macroFormData.macro_close_command.trim() || null,
+        macro_lock_command: macroFormData.macro_lock_command.trim() || null,
+        macro_vent_command: macroFormData.macro_vent_command.trim() || null,
+      };
+
+      await axios.put(`${API_URL}/cabinets/${selectedCabinet.id}`, payload);
+      setMessage('Macro commands updated successfully');
+      await fetchCabinets();
+    } catch (err: any) {
+      const apiErrors = err.response?.data?.errors as Record<string, string[]> | undefined;
+      if (apiErrors) {
+        const firstError = Object.values(apiErrors)[0]?.[0];
+        setError(firstError || 'Failed to update macro commands');
+      } else {
+        setError(err.response?.data?.message || 'Failed to update macro commands');
+      }
+    } finally {
+      setIsSavingMacros(false);
     }
   };
 
@@ -922,6 +994,42 @@ function ConfigurationsTab() {
             ) : (
               <p className="text-sm text-gray-500">No shelves present for this cabinet.</p>
             )}
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Macro Commands</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Define the Close, Lock, and Vent packets used by the Cabinets page.</p>
+              </div>
+              <motion.button
+                whileHover={{ scale: selectedCabinet ? 1.03 : 1 }}
+                whileTap={{ scale: selectedCabinet ? 0.97 : 1 }}
+                onClick={handleMacroSave}
+                disabled={!selectedCabinet || isSavingMacros}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#012169] text-white disabled:opacity-40"
+              >
+                {isSavingMacros ? 'Saving…' : 'Save Commands'}
+              </motion.button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {(Object.keys(macroFields) as MacroFormKey[]).map((key) => (
+                <div key={key}>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    {macroFields[key].label}
+                  </label>
+                  <textarea
+                    value={macroFormData[key]}
+                    onChange={(e) => handleMacroInputChange(key, e.target.value)}
+                    placeholder={macroFields[key].placeholder}
+                    className="w-full h-20 px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm font-mono text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#012169]"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              Inputs accept hexadecimal bytes with or without spaces. We normalize them before saving.
+            </p>
           </div>
         </div>
       ) : (

@@ -4,8 +4,9 @@ import { Plus, Edit, Trash2, DoorOpen, X, Save, Settings, ChevronRight } from 'l
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 interface Room {
   id?: number;

@@ -4,8 +4,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 import PanelGrid from '../components/PanelGrid';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 interface Panel {
   id: number;

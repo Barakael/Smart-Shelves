@@ -48,7 +48,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       try {
         // Determine WebSocket URL based on environment
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = process.env.REACT_APP_WS_URL || `${wsProtocol}//${window.location.host}:8080`;
+        const wsHost = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}:8080`;
         
         const ws = new WebSocket(wsHost);
 

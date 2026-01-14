@@ -28,6 +28,9 @@ export interface Cabinet {
   total_columns?: number | null;
   controller_row?: number | null;
   controller_column?: number | null;
+  macro_close_command?: string | null;
+  macro_lock_command?: string | null;
+  macro_vent_command?: string | null;
   room_id: number;
   is_active: boolean;
   is_connected?: boolean;

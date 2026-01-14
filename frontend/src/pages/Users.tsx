@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus, Edit, Trash2, X, Users as UsersIcon, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 interface User {
   id: number;

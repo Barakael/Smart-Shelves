@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, Crown, Play, Square, ChevronRight, ChevronLeft, Wifi, WifiOff } from 'lucide-react';
 import axios from 'axios';
 import { useSocket } from '../contexts/SocketContext';
+import { getApiUrl } from '../config/environment';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_URL = getApiUrl();
 
 interface Shelf {
   id?: number;
@@ -40,7 +41,7 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
   const [controllerShelf, setControllerShelf] = useState<Shelf | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [panelOpenDirection, setPanelOpenDirection] = useState<'left' | 'right'>('right');
-  const { isConnected, lastEvent, subscribe, unsubscribe } = useSocket();
+  const { isConnected, subscribe, unsubscribe } = useSocket();
 
   useEffect(() => {
     fetchShelves();
@@ -58,7 +59,7 @@ const PanelGrid = ({ panel, roomId, onShelfUpdate }: PanelGridProps) => {
 
   // Handle real-time panel closure notifications
   const handlePanelClosedEvent = (event: any) => {
-    const { shelf_id, cabinet_id, panel_id } = event;
+    const { shelf_id, panel_id } = event;
     
     if (panel_id === panel.id) {
       // Find shelf by ID and close it
