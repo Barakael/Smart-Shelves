@@ -25,6 +25,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cabinets/test-connection', [CabinetController::class, 'testConnection']);
     Route::get('/cabinets/{cabinet}', [CabinetController::class, 'show']);
     Route::get('/cabinets/{cabinet}/status', [CabinetController::class, 'status']);
+    Route::post('/cabinets/{cabinet}/commands/test', [CabinetController::class, 'sendTestCommand']);
+    Route::post('/cabinets/{cabinet}/shelves/{shelf}/open', [CabinetController::class, 'openShelf']);
+    Route::post('/cabinets/{cabinet}/shelves/{shelf}/close', [CabinetController::class, 'closeShelf']);
     Route::put('/cabinets/{cabinet}', [CabinetController::class, 'update']);
     Route::delete('/cabinets/{cabinet}', [CabinetController::class, 'destroy']);
     Route::get('/rooms/{room}/cabinets', [CabinetController::class, 'getByRoom']);
