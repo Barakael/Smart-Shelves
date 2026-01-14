@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Shelf;
 use App\Models\ActionLog;
+use App\Support\HexCommandFormatter;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 class ShelfController extends Controller
 {
@@ -26,7 +29,7 @@ class ShelfController extends Controller
     {
         $user = $request->user();
         
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'ip_address' => 'required|ip',
             'rows' => 'sometimes|integer|min:1',
@@ -34,20 +37,29 @@ class ShelfController extends Controller
             'controller' => 'sometimes|string|max:255',
             'room_id' => 'nullable|exists:rooms,id',
             'panel_id' => 'nullable|exists:panels,id',
+            'cabinet_id' => 'nullable|exists:cabinets,id',
             'row_index' => 'nullable|integer|min:0',
             'column_index' => 'nullable|integer|min:0',
             'is_controller' => 'sometimes|boolean',
+            'shelf_number' => 'nullable|integer|min:1',
+            'is_first' => 'sometimes|boolean',
+            'open_direction' => 'sometimes|in:left,right,up,down',
+            'is_open' => 'sometimes|boolean',
+            'open_command' => 'nullable|string',
+            'close_command' => 'nullable|string',
         ]);
 
         // Check access if panel_id is provided
-        if ($request->panel_id) {
-            $panel = \App\Models\Panel::findOrFail($request->panel_id);
+        if ($validated['panel_id'] ?? null) {
+            $panel = \App\Models\Panel::findOrFail($validated['panel_id']);
             if ($user->isOperator() && $panel->room_id && !$user->rooms->contains($panel->room_id)) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
         }
 
-        $shelf = Shelf::create($request->all());
+        $payload = $this->applyHexCommands($validated, $request);
+
+        $shelf = Shelf::create($payload);
 
         // Log action
         ActionLog::create([
@@ -84,7 +96,7 @@ class ShelfController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'ip_address' => 'sometimes|required|ip',
             'rows' => 'sometimes|integer|min:1',
@@ -92,12 +104,21 @@ class ShelfController extends Controller
             'controller' => 'sometimes|string|max:255',
             'room_id' => 'nullable|exists:rooms,id',
             'panel_id' => 'nullable|exists:panels,id',
+            'cabinet_id' => 'nullable|exists:cabinets,id',
             'row_index' => 'nullable|integer|min:0',
             'column_index' => 'nullable|integer|min:0',
             'is_controller' => 'sometimes|boolean',
+            'shelf_number' => 'nullable|integer|min:1',
+            'is_first' => 'sometimes|boolean',
+            'open_direction' => 'sometimes|in:left,right,up,down',
+            'is_open' => 'sometimes|boolean',
+            'open_command' => 'nullable|string',
+            'close_command' => 'nullable|string',
         ]);
 
-        $shelf->update($request->all());
+        $payload = $this->applyHexCommands($validated, $request);
+
+        $shelf->update($payload);
 
         // Log action
         ActionLog::create([
@@ -137,5 +158,22 @@ class ShelfController extends Controller
 
         return response()->json(['message' => 'Shelf deleted successfully']);
     }
+
+        private function applyHexCommands(array $payload, Request $request): array
+        {
+            foreach (['open_command', 'close_command'] as $field) {
+                if ($request->exists($field)) {
+                    try {
+                        $payload[$field] = HexCommandFormatter::normalize($request->input($field));
+                    } catch (InvalidArgumentException $e) {
+                        throw ValidationException::withMessages([
+                            $field => $e->getMessage(),
+                        ]);
+                    }
+                }
+            }
+
+            return $payload;
+        }
 }
 

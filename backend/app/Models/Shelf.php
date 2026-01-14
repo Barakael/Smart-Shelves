@@ -25,6 +25,8 @@ class Shelf extends Model
         'is_first',
         'open_direction',
         'is_open',
+        'open_command',
+        'close_command',
     ];
 
     protected $casts = [
@@ -36,6 +38,8 @@ class Shelf extends Model
         'row_index' => 'integer',
         'column_index' => 'integer',
         'shelf_number' => 'integer',
+        'open_command' => 'string',
+        'close_command' => 'string',
     ];
 
     public function room()
