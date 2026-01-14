@@ -171,8 +171,7 @@ class PanelController extends Controller
         // If shelf has a cabinet, send TCP command
         if ($shelf->cabinet_id) {
             try {
-                $cabinet = $shelf->cabinet;
-                CabinetSocketService::sendOpenCommand($cabinet, $shelf->column_index);
+                CabinetSocketService::sendShelfCommand($shelf, 'open');
             } catch (\Exception $e) {
                 return response()->json([
                     'message' => 'Failed to send open command to cabinet',
@@ -215,6 +214,17 @@ class PanelController extends Controller
         // Check access
         if ($user->isOperator() && $user->room_id != $room->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($shelf->cabinet_id) {
+            try {
+                CabinetSocketService::sendShelfCommand($shelf, 'close');
+            } catch (\Exception $e) {
+                return response()->json([
+                    'message' => 'Failed to send close command to cabinet',
+                    'error' => $e->getMessage(),
+                ], 500);
+            }
         }
 
         $shelf->update(['is_open' => false]);
