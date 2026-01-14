@@ -43,7 +43,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       initial={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.5 }}
-      className="fixed inset-0 bg-gradient-to-br from-[#012169] via-[#011a54] to-[#000f33] flex items-center justify-center z-[9999]"
+      className="fixed inset-0 bg-gradient-to-b from-[#012169] via-[#011a54] to-white flex items-center justify-center z-[9999]"
     >
       <div className="flex flex-col items-center justify-center space-y-4">
         {/* Main Title - Smart Shelves */}
@@ -74,7 +74,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }}
-            className="text-5xl font-bold text-white tracking-wide"
+            className="text-9xl font-bold text-white tracking-wide"
           >
             Smart Shelves
           </motion.h1>
@@ -84,10 +84,10 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.3, delay: 0.6 }}
+          transition={{ duration: 0.4, delay: 0.6 }}
           className="flex items-center space-x-1 h-8"
         >
-          <span className="text-lg text-primary-300 font-light tracking-wider">
+          <span className="text-lg text-white font-light tracking-wider">
             {typedText}
             <motion.span
               animate={{ opacity: [1, 0] }}
@@ -101,7 +101,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.3, delay: 1.2 }}
+          transition={{ duration: 0.4, delay: 1.2 }}
           className="flex space-x-2 mt-8"
         >
           {[0, 1, 2].map((i) => (
@@ -113,7 +113,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
                 delay: i * 0.15,
                 repeat: Infinity,
               }}
-              className="w-2 h-2 bg-primary-400 rounded-full"
+              className="w-2 h-2 bg-white rounded-full"
             />
           ))}
         </motion.div>

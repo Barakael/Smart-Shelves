@@ -26,7 +26,7 @@ const Sidebar = () => {
         initial={{ width: 72 }}
         animate={{ width: isOpen ? 288 : 80 }}
         transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className="bg-white dark:bg-gray-950 border-r border-primary-300/30 dark:border-primary-800/30 shadow-xl flex flex-col relative z-20 overflow-hidden"
+        className="bg-white dark:bg-gray-900 border-r border-primary-300/30 dark:border-primary-800/30 shadow-xl flex flex-col relative z-20 overflow-hidden"
       >
         {/* Top Section with Title */}
         <div className="bg-[#012169] h-16 px-6 flex items-center justify-center">
@@ -37,7 +37,7 @@ const Sidebar = () => {
         </div>
 
         {/* User Info Section */}
-        <div className="px-4 py-3 bg-white dark:bg-gray-950 border-b border-primary-300/30 dark:border-primary-800/30">
+        <div className="px-4 py-3 bg-white dark:bg-gray-900 border-b border-primary-300/30 dark:border-primary-800/30">
           <div className="flex items-center space-x-3 text-gray-700 dark:text-gray-300">
             <div className="w-9 h-9 rounded-full bg-[#012169] flex items-center justify-center shadow-md flex-shrink-0">
               <span className="text-sm font-semibold text-white">{user?.name?.charAt(0) || 'U'}</span>
@@ -59,7 +59,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex-1 px-2 py-4 space-y-2 bg-white dark:bg-gray-950 ">
+        <nav className="flex-1 px-2 py-4 space-y-2 bg-white dark:bg-gray-900 ">
           {menuItems.map((item) => {
             const Icon = item.icon;
             return (
