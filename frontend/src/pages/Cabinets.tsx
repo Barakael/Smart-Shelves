@@ -389,7 +389,7 @@ const Cabinets: React.FC = () => {
                             : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between">
                           <div>
                             <p className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-500">Cabinet</p>
                             <h4 className="text-xl font-semibold">{cabinet.name}</h4>
@@ -399,19 +399,7 @@ const Cabinets: React.FC = () => {
                             <p className="opacity-80">Port {cabinet.port}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          {isCabinetConnected ? (
-                            <>
-                              <Wifi className="w-4 h-4 text-emerald-300" />
-                              <span>Connected</span>
-                            </>
-                          ) : (
-                            <>
-                              <WifiOff className="w-4 h-4 text-rose-300" />
-                              <span>Offline</span>
-                            </>
-                          )}
-                        </div>
+                       
                         <p className="mt-2 text-xs opacity-75">{getRoomName(cabinet.room_id)}</p>
                       </motion.div>
                     );
@@ -421,12 +409,12 @@ const Cabinets: React.FC = () => {
             </div>
 
             {selectedCabinet ? (
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6 shadow-sm">
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Shelf Rail</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Shelves slide sideways to create a single access gap.</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Send quick commands to all shelves in this cabinet.</p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-3">
                       <div className="flex items-center gap-2">
@@ -446,11 +434,8 @@ const Cabinets: React.FC = () => {
                           </button>
                         ))}
                       </div>
-                    
                     </div>
                   </div>
-
-                
                 </div>
 
                 {!selectedCabinet.shelves || selectedCabinet.shelves.length === 0 ? (
@@ -461,8 +446,7 @@ const Cabinets: React.FC = () => {
                   <div className="space-y-3">
                     {shelvesByRow.map(({ row, shelves }) => (
                       <div key={row} className="rounded-2xl bg-gray-100 dark:bg-gray-800/60 p-3">
-                        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 mb-2">
-                         
+                        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
                           <span>{shelves.length} Shelves</span>
                         </div>
                         <div className="relative flex gap-2 overflow-hidden rounded-2xl bg-gradient-to-b from-gray-200 via-gray-100 to-gray-200 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-2">
@@ -476,7 +460,7 @@ const Cabinets: React.FC = () => {
                                 key={shelf.id}
                                 animate={{ x: shift }}
                                 transition={{ type: 'spring', stiffness: 140, damping: 18 }}
-                                className={`relative left-16 right-10  w-[100px] min-h-[200px] rounded-xl border bg-gradient-to-br from-gray-50 via-gray-200 to-gray-300 text-gray-900 shadow-inner ${
+                                className={`relative left-16 right-10  w-[80px] min-h-[200px] rounded-xl border bg-gradient-to-br from-gray-50 via-gray-200 to-gray-300 text-gray-900 shadow-inner ${
                                   isActive ? 'ring-4 ring-amber-300 border-amber-400' : 'border-gray-400'
                                 }`}
                               >
@@ -487,7 +471,7 @@ const Cabinets: React.FC = () => {
                                   <div>
                                     <p className="text-sm font-semibold truncate w-full">{shelf.name}</p>
                                     {shelf.is_controller && (
-                                      <p className="text-[10px] uppercase tracking-wide text-[#012169] font-bold mt-1">Controller</p>
+                                      <p className="text-[10px] uppercase tracking-wide text-[#012169] font-bold">Controller</p>
                                     )}
                                   </div>
                                   
