@@ -178,7 +178,7 @@ const Rooms = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => handleOpenModal()}
-            className="px-6 py-3 bg-[] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center space-x-2"
+            className="px-6 py-3 bg-blue-900 text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all flex items-center space-x-2"
           >
             <Plus className="w-5 h-5" />
             <span>Add Room</span>
@@ -205,7 +205,7 @@ const Rooms = () => {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{room.description}</p>
             )}
             
-            <motion.button
+            {/* <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => toggleRoomExpansion(room.id!)}
@@ -217,7 +217,7 @@ const Rooms = () => {
               <ChevronRight 
                 className={`w-4 h-4 transition-transform ${expandedRooms.has(room.id!) ? 'rotate-90' : ''}`} 
               />
-            </motion.button>
+            </motion.button> */}
 
             <AnimatePresence>
               {expandedRooms.has(room.id!) && (
