@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 
 interface PanelClosedEvent {
   shelf_id: number;
@@ -38,6 +38,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [eventListeners, setEventListeners] = useState<Map<string, (data: any) => void>>(new Map());
   const [socket, setSocket] = useState<WebSocket | null>(null);
+  const eventListenersRef = useRef(eventListeners);
+  const socketRef = useRef<WebSocket | null>(null);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    eventListenersRef.current = eventListeners;
+  }, [eventListeners]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -47,10 +54,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
       try {
         // Determine WebSocket URL based on environment
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}:8080`;
-        
-        const ws = new WebSocket(wsHost);
+        const explicitUrl = import.meta.env.VITE_WS_URL;
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsHost = import.meta.env.VITE_WS_HOST || window.location.hostname;
+        const wsPort = import.meta.env.VITE_WS_PORT || '8080';
+        const wsUrl = explicitUrl || `${wsProtocol}://${wsHost}${wsPort ? `:${wsPort}` : ''}`;
+
+        const ws = new WebSocket(wsUrl);
+        socketRef.current = ws;
 
         ws.onopen = () => {
           console.log('WebSocket connected');
@@ -74,7 +85,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
               setLastEvent(panelEvent);
 
               // Trigger subscribed callbacks
-              const callback = eventListeners.get('panel_closed');
+              const callback = eventListenersRef.current.get('panel_closed');
               if (callback) {
                 callback(panelEvent);
               }
@@ -82,7 +93,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
             // Handle other event types
             if (data.channel) {
-              const callback = eventListeners.get(data.channel);
+              const callback = eventListenersRef.current.get(data.channel);
               if (callback) {
                 callback(data);
               }
@@ -104,7 +115,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
           setIsConnecting(false);
 
           // Attempt to reconnect after 3 seconds
-          setTimeout(connectWebSocket, 3000);
+          retryTimeoutRef.current = window.setTimeout(connectWebSocket, 3000);
         };
 
         setSocket(ws);
@@ -114,15 +125,18 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         setIsConnecting(false);
 
         // Retry after delay
-        setTimeout(connectWebSocket, 3000);
+        retryTimeoutRef.current = window.setTimeout(connectWebSocket, 3000);
       }
     };
 
     connectWebSocket();
 
     return () => {
-      if (socket) {
-        socket.close();
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
       }
     };
   }, []);
@@ -131,8 +145,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     setEventListeners((prev) => new Map(prev).set(channel, callback));
 
     // Send subscription message if WebSocket is connected
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
+    const activeSocket = socketRef.current;
+    if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+      activeSocket.send(JSON.stringify({
         action: 'subscribe',
         channel: channel,
       }));
@@ -147,8 +162,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     });
 
     // Send unsubscription message if WebSocket is connected
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
+    const activeSocket = socketRef.current;
+    if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+      activeSocket.send(JSON.stringify({
         action: 'unsubscribe',
         channel: channel,
       }));
