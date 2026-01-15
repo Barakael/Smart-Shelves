@@ -14,11 +14,16 @@ import History from './pages/History';
 import Settings from './pages/Settings';
 import Users from './pages/Users';
 import Cabinets from './pages/Cabinets';
+import Documents from './pages/Documents';
 import ProtectedRoute from './components/ProtectedRoute';
 import SplashScreen from './components/SplashScreen';
 
 function App() {
   const [showSplash, setShowSplash] = useState(true);
+  const routerFuture = {
+    v7_startTransition: true,
+    v7_relativeSplatPath: true,
+  } as const;
 
   useEffect(() => {
     // Show splash screen on first load only
@@ -39,7 +44,7 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <SocketProvider>
-            <Router>
+            <Router future={routerFuture}>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route
@@ -56,6 +61,7 @@ function App() {
                   <Route path="rooms" element={<Rooms />} />
                   <Route path="rooms/:roomId/panels/:panelId" element={<PanelConfig />} />
                   <Route path="cabinets" element={<Cabinets />} />
+                  <Route path="documents" element={<Documents />} />
                   <Route path="history" element={<History />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="users" element={<Users />} />

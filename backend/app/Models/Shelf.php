@@ -56,5 +56,10 @@ class Shelf extends Model
     {
         return $this->belongsTo(Cabinet::class);
     }
+
+    public function documents()
+    {
+        return $this->hasMany(Document::class);
+    }
 }
 
