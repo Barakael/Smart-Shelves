@@ -10,7 +10,7 @@ class ActionLogController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = ActionLog::with(['user', 'room', 'panel', 'shelf'])
+        $query = ActionLog::with(['user', 'room', 'panel', 'shelf', 'cabinet'])
             ->orderBy('created_at', 'desc');
 
         // Filter by room if operator
@@ -56,7 +56,7 @@ class ActionLogController extends Controller
     public function show(Request $request, $id)
     {
         $user = $request->user();
-        $log = ActionLog::with(['user', 'room', 'panel', 'shelf'])->findOrFail($id);
+        $log = ActionLog::with(['user', 'room', 'panel', 'shelf', 'cabinet'])->findOrFail($id);
 
         // Check access
         if ($user->isOperator() && $log->room_id && !$user->rooms->contains($log->room_id)) {
