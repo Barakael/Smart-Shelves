@@ -1,1 +1,9 @@
-Reference,Name,Area,Shelf,Docket,Side,Row,Column
+Reference,Name,Area,Shelf,Docket,Side,Row,Column,Status
+DOC-AREA1-001,Payroll Register FY25,area-1,area-1-shelf-01,101,L,1,1,available
+DOC-AREA1-002,Facility Keys Bundle,area-1,area-1-shelf-02,102,R,1,2,taken
+DOC-AREA2-001,Customer Contracts Q1,area-2,area-2-shelf-01,201,L,2,1,returned
+DOC-AREA2-002,Supplier Invoices Jan,area-2,area-2-shelf-02,202,R,2,2,available
+DOC-AREA3-001,Archive Box: HR Files,area-3,area-3-shelf-01,301,L,3,1,available
+DOC-AREA3-002,Audit Evidence Set,area-3,area-3-shelf-02,302,R,3,2,removed
+DOC-AREA4-001,Compliance Certificates,area-4,area-4-shelf-01,401,L,4,1,returned
+DOC-AREA4-002,Blueprints Master Copy,area-4,area-4-shelf-02,402,R,4,2,available

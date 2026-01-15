@@ -6,11 +6,27 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Cabinet, Shelf, Room } from '../types/cabinet';
 import { getApiUrl } from '../config/environment';
+import RoomsPage from './Rooms';
 
 const API_URL = getApiUrl();
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = '12341234Q';
 
-const getTabFromSearch = (search: string): 'personal' | 'configurations' =>
-  new URLSearchParams(search).get('tab') === 'configurations' ? 'configurations' : 'personal';
+type SettingsTab = 'personal' | 'configurations' | 'rooms';
+
+const settingsTabs: { key: SettingsTab; label: string }[] = [
+  { key: 'personal', label: 'Personal' },
+  { key: 'configurations', label: 'Configurations' },
+  { key: 'rooms', label: 'Rooms' },
+];
+
+const getTabFromSearch = (search: string): SettingsTab => {
+  const tabParam = new URLSearchParams(search).get('tab');
+  if (tabParam === 'configurations' || tabParam === 'rooms') {
+    return tabParam;
+  }
+  return 'personal';
+};
 
 const Settings = () => {
   const { user, refreshUser } = useAuth();
@@ -19,7 +35,11 @@ const Settings = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'personal' | 'configurations'>(() => getTabFromSearch(location.search));
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => getTabFromSearch(location.search));
+  const [configAuthorized, setConfigAuthorized] = useState(false);
+  const [configAccessOpen, setConfigAccessOpen] = useState(false);
+  const [configAuthForm, setConfigAuthForm] = useState({ username: '', password: '' });
+  const [configAuthError, setConfigAuthError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -30,15 +50,30 @@ const Settings = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setActiveTab(getTabFromSearch(location.search));
-  }, [location.search]);
+    const desiredTab = getTabFromSearch(location.search);
+    if (desiredTab === 'configurations' && !configAuthorized) {
+      setActiveTab('personal');
+      setConfigAccessOpen(true);
+      if (location.search.includes('tab=configurations')) {
+        navigate('/settings', { replace: true });
+      }
+      return;
+    }
+    setActiveTab(desiredTab);
+  }, [location.search, configAuthorized, navigate]);
 
-  const handleTabChange = (tab: 'personal' | 'configurations') => {
+  const handleTabChange = (tab: SettingsTab) => {
+    if (tab === 'configurations' && !configAuthorized) {
+      setConfigAccessOpen(true);
+      setConfigAuthError(null);
+      setConfigAuthForm({ username: '', password: '' });
+      return;
+    }
     if (tab === activeTab) {
       return;
     }
     setActiveTab(tab);
-    const query = tab === 'configurations' ? '?tab=configurations' : '';
+    const query = tab === 'personal' ? '' : `?tab=${tab}`;
     navigate(`/settings${query}`, { replace: true });
   };
 
@@ -90,8 +125,25 @@ const Settings = () => {
     }
   };
 
+  const handleConfigAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      configAuthForm.username.trim() === ADMIN_USERNAME &&
+      configAuthForm.password === ADMIN_PASSWORD
+    ) {
+      setConfigAuthorized(true);
+      setConfigAccessOpen(false);
+      setConfigAuthError(null);
+      setActiveTab('configurations');
+      navigate('/settings?tab=configurations', { replace: true });
+      return;
+    }
+    setConfigAuthError('Invalid credentials.');
+  };
+
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -102,22 +154,22 @@ const Settings = () => {
       </motion.div>
 
       <div className="flex gap-3 border-b border-gray-200 dark:border-gray-700">
-        {['personal', 'configurations'].map((tab) => (
+        {settingsTabs.map(({ key, label }) => (
           <button
-            key={tab}
-            onClick={() => handleTabChange(tab as 'personal' | 'configurations')}
+            key={key}
+            onClick={() => handleTabChange(key)}
             className={`px-4 py-2 text-sm font-semibold -mb-px border-b-2 transition-colors ${
-              activeTab === tab
+              activeTab === key
                 ? 'border-[#012169] text-[#012169] dark:text-white'
                 : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
-            {tab === 'personal' ? 'Personal' : 'Configurations'}
+            {label}
           </button>
         ))}
       </div>
 
-      {activeTab === 'personal' ? (
+      {activeTab === 'personal' && (
         <>
           {message && (
             <div className="p-3 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-300 dark:border-green-800">
@@ -238,10 +290,85 @@ const Settings = () => {
             </motion.div>
           </div>
         </>
-      ) : (
-        <ConfigurationsTab />
       )}
-    </div>
+
+      {activeTab === 'configurations' && <ConfigurationsTab />}
+
+      {activeTab === 'rooms' && (
+        <div className="pt-2">
+          <RoomsPage />
+        </div>
+      )}
+      </div>
+
+      {configAccessOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Admin Access Required</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Enter credentials to view configurations.</p>
+              </div>
+              <button
+                aria-label="Close"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                onClick={() => {
+                  setConfigAccessOpen(false);
+                  setConfigAuthError(null);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {configAuthError && (
+              <div className="mb-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+                {configAuthError}
+              </div>
+            )}
+            <form className="space-y-4" onSubmit={handleConfigAuthSubmit}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={configAuthForm.username}
+                  onChange={(e) => setConfigAuthForm(prev => ({ ...prev, username: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#012169]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={configAuthForm.password}
+                  onChange={(e) => setConfigAuthForm(prev => ({ ...prev, password: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#012169]"
+                  required
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    setConfigAccessOpen(false);
+                    setConfigAuthError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-lg bg-[#012169] px-4 py-2 font-semibold text-white hover:bg-[#011449]"
+                >
+                  Unlock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

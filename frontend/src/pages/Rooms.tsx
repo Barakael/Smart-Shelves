@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Edit, Trash2, DoorOpen, X, Save, Settings, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { getApiUrl } from '../config/environment';
 
 const API_URL = getApiUrl();
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = '12341234Q';
 
 interface Room {
   id?: number;
@@ -34,6 +36,9 @@ const Rooms = () => {
   const [isPanelModalOpen, setIsPanelModalOpen] = useState(false);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [accessForm, setAccessForm] = useState({ username: '', password: '' });
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [formData, setFormData] = useState<Room>({
     name: '',
     description: '',
@@ -44,18 +49,20 @@ const Rooms = () => {
     columns: 8, // 8-14 shelves (4-6 columns)
   });
 
-  useEffect(() => {
-    fetchRooms();
-  }, []);
-
-  const fetchRooms = async () => {
+  const fetchRooms = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/rooms`);
       setRooms(response.data);
     } catch (error) {
       console.error('Failed to fetch rooms:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isAuthorized) {
+      fetchRooms();
+    }
+  }, [isAuthorized, fetchRooms]);
 
   const fetchPanels = async (roomId: number) => {
     try {
@@ -158,6 +165,66 @@ const Rooms = () => {
       alert(error.response?.data?.message || 'Failed to delete room');
     }
   };
+
+  const handleAccessSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      accessForm.username.trim() === ADMIN_USERNAME &&
+      accessForm.password === ADMIN_PASSWORD
+    ) {
+      setIsAuthorized(true);
+      setAccessError(null);
+      setAccessForm({ username: '', password: '' });
+      return;
+    }
+    setAccessError('Invalid credentials.');
+  };
+
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="bg-white dark:bg-primary-950 border border-primary-200 dark:border-primary-800 rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Restricted Access</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+            Enter the administrator credentials to manage rooms.
+          </p>
+          {accessError && (
+            <div className="mb-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/30 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+              {accessError}
+            </div>
+          )}
+          <form className="space-y-4" onSubmit={handleAccessSubmit}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Username</label>
+              <input
+                type="text"
+                value={accessForm.username}
+                onChange={(e) => setAccessForm(prev => ({ ...prev, username: e.target.value }))}
+                className="w-full rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 px-4 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
+              <input
+                type="password"
+                value={accessForm.password}
+                onChange={(e) => setAccessForm(prev => ({ ...prev, password: e.target.value }))}
+                className="w-full rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 px-4 py-2 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full rounded-lg bg-[#012169] py-2.5 text-white font-semibold hover:bg-[#011a54] transition-colors"
+            >
+              Unlock Rooms
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

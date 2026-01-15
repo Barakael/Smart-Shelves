@@ -304,14 +304,7 @@ const Cabinets: React.FC = () => {
             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100">Cabinets</h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">Operate shelves and dispatch cabinet commands</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => navigate('/settings?tab=configurations')}
-            className="flex items-center gap-2 px-4 py-2 bg-[#012169] text-white rounded-lg font-medium shadow-lg hover:bg-[#011a54] transition-all"
-          >
-            Manage Configurations
-          </motion.button>
+       
         </div>
 
         {error && (

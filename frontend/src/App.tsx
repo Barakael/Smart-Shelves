@@ -55,7 +55,7 @@ function App() {
                     </ProtectedRoute>
                   }
                 >
-                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  <Route index element={<Navigate to="/cabinets" replace />} />
                   <Route path="dashboard" element={<Dashboard />} />
                   <Route path="shelves" element={<ShelvesConfig />} />
                   <Route path="rooms" element={<Rooms />} />
