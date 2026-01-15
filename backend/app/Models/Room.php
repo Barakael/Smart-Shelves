@@ -28,5 +28,10 @@ class Room extends Model
     {
         return $this->belongsToMany(User::class, 'user_rooms');
     }
+
+    public function documents()
+    {
+        return $this->hasMany(Document::class);
+    }
 }
 
