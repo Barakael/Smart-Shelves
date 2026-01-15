@@ -22,7 +22,7 @@ const Login = () => {
     try {
       if (isLogin) {
         await login(email, password);
-        navigate('/dashboard');
+        navigate('/cabinets');
       } else {
         // Sign up logic would go here
         setError('Sign up functionality coming soon');

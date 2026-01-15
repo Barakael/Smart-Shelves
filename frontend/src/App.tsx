@@ -6,7 +6,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { SocketProvider } from './contexts/SocketContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
+// import Dashboard from './pages/Dashboard';
 import ShelvesConfig from './pages/ShelvesConfig';
 import Rooms from './pages/Rooms';
 import PanelConfig from './pages/PanelConfig';
@@ -56,7 +56,7 @@ function App() {
                   }
                 >
                   <Route index element={<Navigate to="/cabinets" replace />} />
-                  <Route path="dashboard" element={<Dashboard />} />
+                  {/* <Route path="dashboard" element={<Dashboard />} /> */}
                   <Route path="shelves" element={<ShelvesConfig />} />
                   <Route path="rooms" element={<Rooms />} />
                   <Route path="rooms/:roomId/panels/:panelId" element={<PanelConfig />} />

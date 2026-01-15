@@ -7,33 +7,60 @@ use tauri::Manager;
 
 struct PhpServer(Mutex<Option<Child>>);
 
-fn start_php_server(resource_path: &std::path::Path) -> Result<Child, std::io::Error> {
+use std::{thread, time};
+use std::net::TcpStream;
+use tauri::api::dialog;
+
+fn start_php_server(resource_path: &std::path::Path) -> Result<Child, String> {
     let php_server_path = resource_path.join("resources").join("php-server");
-    
     println!("📂 PHP server path: {:?}", php_server_path);
-    
+
     #[cfg(target_os = "windows")]
     let startup_script = php_server_path.join("start-server.bat");
-    
     #[cfg(not(target_os = "windows"))]
     let startup_script = php_server_path.join("start-server.sh");
-    
     println!("🚀 Starting PHP server from: {:?}", startup_script);
-    
-    #[cfg(target_os = "windows")]
-    let child = Command::new("cmd")
-        .args(&["/C", startup_script.to_str().unwrap()])
-        .current_dir(&php_server_path)
-        .spawn()?;
-    
-    #[cfg(not(target_os = "windows"))]
-    let child = Command::new("bash")
-        .arg(&startup_script)
-        .current_dir(&php_server_path)
-        .spawn()?;
-    
-    println!("✅ PHP server started with PID: {}", child.id());
-    Ok(child)
+
+    let mut last_err = None;
+    for attempt in 1..=5 {
+        #[cfg(target_os = "windows")]
+        let child_result = Command::new("cmd")
+            .args(&["/C", startup_script.to_str().unwrap()])
+            .current_dir(&php_server_path)
+            .spawn();
+        #[cfg(not(target_os = "windows"))]
+        let child_result = Command::new("bash")
+            .arg(&startup_script)
+            .current_dir(&php_server_path)
+            .spawn();
+
+        match child_result {
+            Ok(mut child) => {
+                // Wait for port 8765 to be open
+                let mut ready = false;
+                for _ in 0..10 {
+                    if TcpStream::connect("127.0.0.1:8765").is_ok() {
+                        ready = true;
+                        break;
+                    }
+                    thread::sleep(time::Duration::from_millis(300));
+                }
+                if ready {
+                    println!("✅ PHP server started with PID: {}", child.id());
+                    return Ok(child);
+                } else {
+                    println!("❌ PHP server process started but port 8765 not open (attempt {attempt})");
+                    let _ = child.kill();
+                }
+            }
+            Err(e) => {
+                println!("❌ Failed to start PHP server (attempt {attempt}): {e}");
+                last_err = Some(e.to_string());
+            }
+        }
+        thread::sleep(time::Duration::from_secs(1));
+    }
+    Err(last_err.unwrap_or_else(|| "Unknown error".to_string()))
 }
 
 fn main() {
@@ -54,8 +81,8 @@ fn main() {
                     app.manage(PhpServer(Mutex::new(Some(child))));
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to start PHP server: {}", e);
-                    eprintln!("⚠️  Ensure PHP is installed and accessible in PATH");
+                    eprintln!("❌ Failed to start PHP server after multiple attempts: {}", e);
+                    dialog::blocking::message(Some(&app.get_window("main").unwrap()), "Backend Startup Error", &format!("The backend server failed to start after several attempts.\n\nError: {}\n\nPlease ensure PHP is installed and port 8765 is free, then restart the app.", e));
                     app.manage(PhpServer(Mutex::new(None)));
                 }
             }
