@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Wifi, WifiOff, Lock, Wind, XCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Lock, Wind, XCircle } from 'lucide-react';
 import axios from 'axios';
 import { Cabinet, Shelf, Room } from '../types/cabinet';
 import { getApiUrl } from '../config/environment';
@@ -27,7 +26,6 @@ const MACRO_STYLES: Record<MacroType, string> = {
 };
 
 const Cabinets: React.FC = () => {
-  const navigate = useNavigate();
   const [cabinets, setCabinets] = useState<Cabinet[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -370,7 +368,6 @@ const Cabinets: React.FC = () => {
               ) : (
                 <div className="flex gap-4 overflow-x-auto pb-4">
                   {filteredCabinets.map(cabinet => {
-                    const isCabinetConnected = cabinet.is_connected ?? false;
                     return (
                       <motion.div
                         key={cabinet.id}

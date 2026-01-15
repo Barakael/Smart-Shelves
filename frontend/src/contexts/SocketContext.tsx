@@ -37,7 +37,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [lastEvent, setLastEvent] = useState<PanelClosedEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [eventListeners, setEventListeners] = useState<Map<string, (data: any) => void>>(new Map());
-  const [socket, setSocket] = useState<WebSocket | null>(null);
   const eventListenersRef = useRef(eventListeners);
   const socketRef = useRef<WebSocket | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,8 +116,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
           // Attempt to reconnect after 3 seconds
           retryTimeoutRef.current = window.setTimeout(connectWebSocket, 3000);
         };
-
-        setSocket(ws);
       } catch (err) {
         console.error('Failed to create WebSocket:', err);
         setError(err instanceof Error ? err.message : 'Failed to connect');

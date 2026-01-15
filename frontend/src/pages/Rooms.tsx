@@ -272,7 +272,7 @@ const Rooms = () => {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{room.description}</p>
             )}
             
-            {/* <motion.button
+            <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => toggleRoomExpansion(room.id!)}
@@ -284,7 +284,7 @@ const Rooms = () => {
               <ChevronRight 
                 className={`w-4 h-4 transition-transform ${expandedRooms.has(room.id!) ? 'rotate-90' : ''}`} 
               />
-            </motion.button> */}
+            </motion.button>
 
             <AnimatePresence>
               {expandedRooms.has(room.id!) && (

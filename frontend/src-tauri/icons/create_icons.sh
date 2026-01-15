@@ -1,39 +1,46 @@
 #!/bin/bash
 
-# Create a simple SVG icon
-cat > icon.svg << 'SVG'
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" fill="#3b82f6"/>
-  <text x="256" y="380" font-family="Arial, sans-serif" font-size="350" fill="white" text-anchor="middle" font-weight="bold">S</text>
-</svg>
-SVG
+set -euo pipefail
 
-# Convert SVG to PNG using rsvg-convert if available, otherwise use a fallback
-if command -v rsvg-convert &> /dev/null; then
-    rsvg-convert -w 32 -h 32 icon.svg -o 32x32.png
-    rsvg-convert -w 128 -h 128 icon.svg -o 128x128.png
-    rsvg-convert -w 256 -h 256 icon.svg -o 128x128@2x.png
-elif command -v convert &> /dev/null; then
-    convert -size 32x32 -background '#3b82f6' -fill white -font Arial-Bold -pointsize 24 -gravity center label:S 32x32.png
-    convert -size 128x128 -background '#3b82f6' -fill white -font Arial-Bold -pointsize 96 -gravity center label:S 128x128.png
-    convert -size 256x256 -background '#3b82f6' -fill white -font Arial-Bold -pointsize 192 -gravity center label:S 128x128@2x.png
-else
-    # Fallback: create solid color icons using sips
-    sips -s format png --out 32x32.png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns --resampleWidth 32 2>/dev/null || true
-    sips -s format png --out 128x128.png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns --resampleWidth 128 2>/dev/null || true
-    sips -s format png --out 128x128@2x.png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns --resampleWidth 256 2>/dev/null || true
+SOURCE_IMAGE="tera-logo.png"
+ICONSET_DIR="tera.iconset"
+
+if [ ! -f "$SOURCE_IMAGE" ]; then
+    echo "\n⚠️  Place the TERA logo PNG inside src-tauri/icons as '$SOURCE_IMAGE' before running this script." >&2
+    exit 1
 fi
 
-# Create .icns for macOS (use existing system icon as base)
-cp /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns icon.icns 2>/dev/null || touch icon.icns
+echo "Generating platform icons from $SOURCE_IMAGE ..."
 
-# Create .ico for Windows (simplified)
-if [ -f "32x32.png" ]; then
-    cp 32x32.png icon.ico
+rm -rf "$ICONSET_DIR" icon.icns icon.ico
+mkdir -p "$ICONSET_DIR"
+
+# macOS iconset sizes
+sizes=(16 32 64 128 256 512)
+
+for size in "${sizes[@]}"; do
+    double=$((size * 2))
+    sips -z "$size" "$size" "$SOURCE_IMAGE" --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+    sips -z "$double" "$double" "$SOURCE_IMAGE" --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+done
+
+iconutil -c icns "$ICONSET_DIR" -o icon.icns >/dev/null
+
+# Base PNGs referenced by tauri.conf.json
+cp "$ICONSET_DIR/icon_32x32.png" 32x32.png
+cp "$ICONSET_DIR/icon_128x128.png" 128x128.png
+cp "$ICONSET_DIR/icon_256x256.png" 128x128@2x.png
+
+# Windows ICO (prefer ImageMagick if available)
+if command -v convert >/dev/null 2>&1; then
+    convert \
+        "$ICONSET_DIR/icon_32x32.png" \
+        "$ICONSET_DIR/icon_64x64.png" \
+        "$ICONSET_DIR/icon_128x128.png" \
+        "$ICONSET_DIR/icon_256x256.png" \
+        icon.ico
 else
-    touch icon.ico
+    cp "$ICONSET_DIR/icon_256x256.png" icon.ico
 fi
 
-echo "Icons created!"
-ls -la
+echo "✅ Icons updated. Files available in src-tauri/icons/"

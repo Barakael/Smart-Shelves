@@ -3,12 +3,14 @@
 
 use std::process::{Child, Command};
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::Manager;
 
 struct PhpServer(Mutex<Option<Child>>);
 
 fn start_php_server(resource_path: &std::path::Path) -> Result<Child, std::io::Error> {
-    let php_server_path = resource_path.join("php-server");
+    let php_server_path = resource_path.join("resources").join("php-server");
+    
+    println!("📂 PHP server path: {:?}", php_server_path);
     
     #[cfg(target_os = "windows")]
     let startup_script = php_server_path.join("start-server.bat");
@@ -16,19 +18,21 @@ fn start_php_server(resource_path: &std::path::Path) -> Result<Child, std::io::E
     #[cfg(not(target_os = "windows"))]
     let startup_script = php_server_path.join("start-server.sh");
     
-    println!("Starting PHP server from: {:?}", startup_script);
+    println!("🚀 Starting PHP server from: {:?}", startup_script);
     
     #[cfg(target_os = "windows")]
     let child = Command::new("cmd")
         .args(&["/C", startup_script.to_str().unwrap()])
+        .current_dir(&php_server_path)
         .spawn()?;
     
     #[cfg(not(target_os = "windows"))]
-    let child = Command::new("sh")
+    let child = Command::new("bash")
         .arg(&startup_script)
+        .current_dir(&php_server_path)
         .spawn()?;
     
-    println!("PHP server started with PID: {}", child.id());
+    println!("✅ PHP server started with PID: {}", child.id());
     Ok(child)
 }
 
@@ -37,17 +41,21 @@ fn main() {
         .setup(|app| {
             let resource_path = app.path_resolver()
                 .resource_dir()
-                .expect("failed to get resource dir");
+                .expect("❌ Failed to get resource directory");
             
-            // Start PHP server
+            println!("📦 Resource directory: {:?}", resource_path);
+            
+            // Start PHP server with auto-initialization
             match start_php_server(&resource_path) {
                 Ok(child) => {
                     println!("✅ PHP backend server started successfully");
+                    println!("📊 Server will auto-initialize database on first launch");
+                    println!("🌐 API available at: http://127.0.0.1:8765");
                     app.manage(PhpServer(Mutex::new(Some(child))));
                 }
                 Err(e) => {
                     eprintln!("❌ Failed to start PHP server: {}", e);
-                    // Continue anyway - user might be running server manually
+                    eprintln!("⚠️  Ensure PHP is installed and accessible in PATH");
                     app.manage(PhpServer(Mutex::new(None)));
                 }
             }
@@ -56,7 +64,7 @@ fn main() {
         })
         .on_window_event(|event| {
             if let tauri::WindowEvent::Destroyed = event.event() {
-                // Window is closing, we'll handle cleanup in the main exit handler
+                // Window is closing, cleanup handled in main exit handler
             }
         })
         .build(tauri::generate_context!())
@@ -68,6 +76,12 @@ fn main() {
                     if let Ok(mut server) = php_server_state.0.lock() {
                         if let Some(mut child) = server.take() {
                             println!("🛑 Stopping PHP server...");
+                            #[cfg(target_os = "windows")]
+                            {
+                                let _ = Command::new("taskkill")
+                                    .args(&["/PID", &child.id().to_string(), "/F", "/T"])
+                                    .spawn();
+                            }
                             let _ = child.kill();
                             let _ = child.wait();
                             println!("✅ PHP server stopped");

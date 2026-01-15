@@ -65,7 +65,7 @@ const Dashboard = () => {
     roomCount: 0,
   });
   const [statsLoading, setStatsLoading] = useState(false);
-  const [shelfStates, setShelfStates] = useState<Record<number, boolean>>({});
+  const [, setShelfStates] = useState<Record<number, boolean>>({});
   const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([]);
 
   useEffect(() => {

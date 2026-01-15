@@ -6,6 +6,7 @@ use App\Http\Controllers\ShelfController;
 use App\Http\Controllers\PanelController;
 use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\ActionLogController;
+use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -52,5 +53,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Action logs
     Route::get('/action-logs', [ActionLogController::class, 'index']);
     Route::get('/action-logs/{id}', [ActionLogController::class, 'show']);
+
+    // Documents
+    Route::get('/documents/filters', [DocumentController::class, 'filters']);
+    Route::apiResource('documents', DocumentController::class)->except(['create', 'edit']);
 });
 

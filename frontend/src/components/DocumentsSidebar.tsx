@@ -90,10 +90,11 @@ const DocumentsSidebar: React.FC<DocumentsSidebarProps> = ({
     if (!searchTerm.trim()) return sortedDocuments;
     const term = searchTerm.trim().toLowerCase();
     return sortedDocuments.filter(doc => {
+      const shelfValue = (doc.shelf ?? '').toLowerCase();
       return (
         doc.reference.toLowerCase().includes(term) ||
         doc.name.toLowerCase().includes(term) ||
-        doc.shelf.toLowerCase().includes(term)
+        shelfValue.includes(term)
       );
     });
   }, [sortedDocuments, searchTerm]);
@@ -240,7 +241,7 @@ const DocumentsSidebar: React.FC<DocumentsSidebarProps> = ({
 
   const handleStatusUpdate = (status: DocumentStatus) => {
     if (!statusModalDoc || !areaKey) return;
-    onUpdateStatus(areaKey, statusModalDoc.id, status);
+    onUpdateStatus(areaKey, String(statusModalDoc.id), status);
     setStatusModalDoc(null);
   };
 

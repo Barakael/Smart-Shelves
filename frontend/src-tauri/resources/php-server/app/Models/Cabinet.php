@@ -70,4 +70,12 @@ class Cabinet extends Model
     {
         return $this->hasMany(ActionLog::class, 'cabinet_id');
     }
+
+    /**
+     * Documents tracked inside this cabinet.
+     */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(Document::class);
+    }
 }
