@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef, useMemo } from 'react';
 
 interface PanelClosedEvent {
   shelf_id: number;
@@ -41,25 +41,42 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const socketRef = useRef<WebSocket | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const resolvedWsUrl = useMemo(() => {
+    const explicitUrl = (import.meta.env.VITE_WS_URL as string | undefined)?.trim();
+    if (explicitUrl) {
+      return explicitUrl;
+    }
+
+    const envHost = (import.meta.env.VITE_WS_HOST as string | undefined)?.trim();
+    const envPort = (import.meta.env.VITE_WS_PORT as string | undefined)?.trim();
+
+    if (!envHost || !envPort) {
+      return null;
+    }
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${wsProtocol}://${envHost}${envPort ? `:${envPort}` : ''}`;
+  }, []);
+
   useEffect(() => {
     eventListenersRef.current = eventListeners;
   }, [eventListeners]);
 
   // Initialize WebSocket connection
   useEffect(() => {
+    if (!resolvedWsUrl) {
+      setError('WebSocket URL not configured; skipping real-time channel connection.');
+      setIsConnected(false);
+      setIsConnecting(false);
+      return;
+    }
+
     const connectWebSocket = () => {
       setIsConnecting(true);
       setError(null);
 
       try {
-        // Determine WebSocket URL based on environment
-        const explicitUrl = import.meta.env.VITE_WS_URL;
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsHost = import.meta.env.VITE_WS_HOST || window.location.hostname;
-        const wsPort = import.meta.env.VITE_WS_PORT || '8080';
-        const wsUrl = explicitUrl || `${wsProtocol}://${wsHost}${wsPort ? `:${wsPort}` : ''}`;
-
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(resolvedWsUrl);
         socketRef.current = ws;
 
         ws.onopen = () => {
@@ -136,7 +153,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         socketRef.current.close();
       }
     };
-  }, []);
+  }, [resolvedWsUrl]);
 
   const subscribe = (channel: string, callback: (data: any) => void) => {
     setEventListeners((prev) => new Map(prev).set(channel, callback));

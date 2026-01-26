@@ -4,24 +4,39 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Download, Filter, FileArchive, Paperclip, PlusCircle, RefreshCw, Search, Trash2, UploadCloud, X } from 'lucide-react';
 import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../types/documents';
+import { CabinetOption, DocumentPageMeta, DocumentQueryState, FiltersResponse } from '../types/documentsPage';
+import DocumentFiltersPanel from '../components/documents/DocumentFiltersPanel';
+import DocumentTable from '../components/documents/DocumentTable';
+import DocumentDetailModal from '../components/documents/DocumentDetailModal';
+import { DEFAULT_STATUSES, statusLabels } from '../components/documents/statusConfig';
 import { getApiUrl, getBulkServiceUrl } from '../config/environment';
 import templateUrl from '../resources/images/eShelfTemplate.csv?url';
 
 const API_URL = getApiUrl();
 const BULK_API_URL = getBulkServiceUrl();
+const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
+const resolveDocumentFileUrl = (fileUrl?: string | null): string | null => {
+  if (!fileUrl) return null;
+  if (/^https?:\/\//i.test(fileUrl)) {
+    return fileUrl;
+  }
+  const normalized = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+  return `${API_ORIGIN}${normalized}`;
+};
 const ITEMS_PER_PAGE = 10;
-const DEFAULT_STATUSES: DocumentStatus[] = ['available', 'taken', 'returned', 'removed'];
+const STATUS_HISTORY_LIMIT = 3;
+const DOCUMENTS_LOAD_ERROR = 'Unable to load documents. Please try again.';
 
 const TEMPLATE_HEADERS = ['Reference', 'Name', 'Area', 'Shelf', 'Docket', 'Side', 'Row', 'Column', 'Status'];
 const TEMPLATE_SAMPLE_ROWS = [
-  ['DOC-AREA1-001', 'Payroll Register FY25', 'area-1', 'area-1-shelf-01', 101, 'L', 1, 1, 'available'],
-  ['DOC-AREA1-002', 'Facility Keys Bundle', 'area-1', 'area-1-shelf-02', 102, 'R', 1, 2, 'taken'],
-  ['DOC-AREA2-001', 'Customer Contracts Q1', 'area-2', 'area-2-shelf-01', 201, 'L', 2, 1, 'returned'],
-  ['DOC-AREA2-002', 'Supplier Invoices Jan', 'area-2', 'area-2-shelf-02', 202, 'R', 2, 2, 'available'],
-  ['DOC-AREA3-001', 'Archive Box: HR Files', 'area-3', 'area-3-shelf-01', 301, 'L', 3, 1, 'available'],
-  ['DOC-AREA3-002', 'Audit Evidence Set', 'area-3', 'area-3-shelf-02', 302, 'R', 3, 2, 'removed'],
-  ['DOC-AREA4-001', 'Compliance Certificates', 'area-4', 'area-4-shelf-01', 401, 'L', 4, 1, 'returned'],
-  ['DOC-AREA4-002', 'Blueprints Master Copy', 'area-4', 'area-4-shelf-02', 402, 'R', 4, 2, 'available'],
+  ['DOC-AREA1-001', 'Payroll Register FY25', 'area-1', 'shelf-01', 101, 'L', 1, 1, 'available'],
+  ['DOC-AREA1-002', 'Facility Keys Bundle', 'area-1', 'shelf-02', 102, 'R', 1, 2, 'taken'],
+  ['DOC-AREA2-001', 'Customer Contracts Q1', 'area-2', 'shelf-01', 201, 'L', 2, 1, 'returned'],
+  ['DOC-AREA2-002', 'Supplier Invoices Jan', 'area-2', 'shelf-02', 202, 'R', 2, 2, 'available'],
+  ['DOC-AREA3-001', 'Archive Box: HR Files', 'area-3', 'shelf-01', 301, 'L', 3, 1, 'available'],
+  ['DOC-AREA3-002', 'Audit Evidence Set', 'area-3', 'shelf-02', 302, 'R', 3, 2, 'removed'],
+  ['DOC-AREA4-001', 'Compliance Certificates', 'area-4', 'shelf-01', 401, 'L', 4, 1, 'returned'],
+  ['DOC-AREA4-002', 'Blueprints Master Copy', 'area-4', 'shelf-02', 402, 'R', 4, 2, 'available'],
 ];
 
 type PreparedDocumentPayload = {
@@ -38,31 +53,9 @@ interface PaginatedResponse<T> {
   to: number | null;
 }
 
-interface FiltersResponse {
-  rooms: { id: number; name: string }[];
-  cabinets: CabinetOption[];
-  statuses: DocumentStatus[];
-}
-
-interface CabinetOption {
-  id: number;
-  name: string;
-  room_id: number;
-  shelves?: { id: number; name: string }[];
-}
-
-const statusStyles: Record<DocumentStatus, string> = {
-  available: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  taken: 'bg-amber-50 text-amber-800 border border-amber-200',
-  returned: 'bg-blue-50 text-blue-800 border border-blue-200',
-  removed: 'bg-rose-50 text-rose-800 border border-rose-200',
-};
-
-const statusLabels: Record<DocumentStatus, string> = {
-  available: 'Available',
-  taken: 'Taken',
-  returned: 'Returned',
-  removed: 'Removed',
+type ApiDocumentRecord = Omit<DocumentRecord, 'shelf' | 'shelfMeta'> & {
+  shelf?: { id: number; name: string } | string | null;
+  shelfMeta?: DocumentRecord['shelfMeta'] | { id: number; name: string } | null;
 };
 
 const normalizeStatus = (value?: string): DocumentStatus => {
@@ -111,7 +104,7 @@ const Documents: React.FC = () => {
   const [isPdfImporting, setIsPdfImporting] = useState(false);
   const [manualPdfFile, setManualPdfFile] = useState<File | null>(null);
   const [searchInput, setSearchInput] = useState('');
-  const [query, setQuery] = useState({
+  const [query, setQuery] = useState<DocumentQueryState>({
     page: 1,
     from_date: '',
     to_date: '',
@@ -119,7 +112,7 @@ const Documents: React.FC = () => {
     shelf_id: '',
     search: '',
   });
-  const [pageMeta, setPageMeta] = useState({ total: 0, lastPage: 1, from: 0, to: 0 });
+  const [pageMeta, setPageMeta] = useState<DocumentPageMeta>({ total: 0, lastPage: 1, from: 0, to: 0 });
   const [filterOptions, setFilterOptions] = useState<FiltersResponse>({
     rooms: [],
     cabinets: [],
@@ -137,13 +130,76 @@ const Documents: React.FC = () => {
     column: '',
   });
   const [selectedDocument, setSelectedDocument] = useState<DocumentRecord | null>(null);
+  const [editingDocument, setEditingDocument] = useState<DocumentRecord | null>(null);
   const [statusHistory, setStatusHistory] = useState<DocumentStatusHistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [isShelfOpening, setIsShelfOpening] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+  const [isShelfOpening, setIsShelfOpening] = useState(false);
   const [isStatusUpdating, setIsStatusUpdating] = useState(false);
   const isBulkServiceEnabled = Boolean(BULK_API_URL);
+
+  const normalizeDocument = useCallback((record: ApiDocumentRecord): DocumentRecord => {
+    const shelfRelation = typeof record.shelf === 'object' && record.shelf !== null ? record.shelf : null;
+    const deriveNumber = (value?: number | string | null) => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const rowValue = deriveNumber(record.row ?? record.row_index);
+    const columnValue = deriveNumber(record.column ?? record.column_index);
+    const shelfName =
+      record.shelf_label ||
+      (typeof record.shelf === 'string' ? record.shelf : null) ||
+      shelfRelation?.name ||
+      undefined;
+
+    return {
+      ...record,
+      shelf: shelfName,
+      row: rowValue,
+      column: columnValue,
+      row_index: rowValue,
+      column_index: columnValue,
+      shelfMeta: record.shelfMeta ?? (shelfRelation ? { id: shelfRelation.id, name: shelfRelation.name } : null),
+    };
+  }, []);
+
+  const fetchDocuments = useCallback(async () => {
+    setIsLoading(true);
+
+    const params: Record<string, string | number> = {
+      page: query.page,
+      per_page: ITEMS_PER_PAGE,
+    };
+
+    if (query.from_date) params.from_date = query.from_date;
+    if (query.to_date) params.to_date = query.to_date;
+    if (query.cabinet_id) params.cabinet_id = query.cabinet_id;
+    if (query.shelf_id) params.shelf_id = query.shelf_id;
+    if (query.search) params.search = query.search;
+
+    try {
+      const { data } = await axios.get<PaginatedResponse<ApiDocumentRecord>>(`${API_URL}/documents`, { params });
+      const normalized = data.data.map(normalizeDocument);
+      setDocuments(normalized);
+      setPageMeta({
+        total: data.total,
+        lastPage: data.last_page || 1,
+        from: data.from || 0,
+        to: data.to || 0,
+      });
+      setError(prev => (prev === DOCUMENTS_LOAD_ERROR ? null : prev));
+    } catch (err) {
+      console.error('Failed to load documents', err);
+      setDocuments([]);
+      setPageMeta({ total: 0, lastPage: 1, from: 0, to: 0 });
+      setError(DOCUMENTS_LOAD_ERROR);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [normalizeDocument, query]);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -158,70 +214,18 @@ const Documents: React.FC = () => {
     }
   }, []);
 
-  const normalizeDocument = useCallback((doc: any): DocumentRecord => ({
-    id: doc.id,
-    reference: doc.reference,
-    name: doc.name,
-    status: doc.status,
-    area: doc.cabinet?.name?.trim().toLowerCase() || doc.area || '',
-    shelf: doc.shelf_label || doc.shelf?.name || '',
-    shelf_label: doc.shelf_label || doc.shelf?.name || '',
-    docket: doc.docket ?? null,
-    side: doc.side ?? null,
-    row: doc.row ?? doc.row_index ?? null,
-    column: doc.column ?? doc.column_index ?? null,
-    row_index: doc.row_index ?? null,
-    column_index: doc.column_index ?? null,
-    metadata: doc.metadata ?? null,
-    file_url: doc.file_url ?? null,
-    file_original_name: doc.file_original_name ?? null,
-    has_file: Boolean(doc.has_file ?? doc.file_path),
-    created_at: doc.created_at,
-    updated_at: doc.updated_at,
-    cabinet: doc.cabinet ? { id: doc.cabinet.id, name: doc.cabinet.name } : null,
-    shelfMeta: doc.shelf ? { id: doc.shelf.id, name: doc.shelf.name } : null,
-    room: doc.room ? { id: doc.room.id, name: doc.room.name } : null,
-  }), []);
-
-  const fetchDocuments = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', query.page.toString());
-      params.set('per_page', ITEMS_PER_PAGE.toString());
-      if (query.from_date) params.set('from_date', query.from_date);
-      if (query.to_date) params.set('to_date', query.to_date);
-      if (query.cabinet_id) params.set('cabinet_id', query.cabinet_id);
-      if (query.shelf_id) params.set('shelf_id', query.shelf_id);
-      if (query.search) params.set('search', query.search);
-
-      const response = await axios.get<PaginatedResponse<any>>(`${API_URL}/documents?${params.toString()}`);
-      const payload = response.data;
-      const mapped = (payload.data ?? []).map(normalizeDocument);
-      setDocuments(mapped);
-      setPageMeta({
-        total: payload.total ?? mapped.length,
-        lastPage: payload.last_page ?? 1,
-        from: payload.from ?? 0,
-        to: payload.to ?? 0,
-      });
-
-      if (payload.current_page && payload.current_page !== query.page) {
-        setQuery(prev => ({ ...prev, page: payload.current_page }));
+  const handleFilterChange = useCallback((updates: Partial<DocumentQueryState>) => {
+    setQuery(prev => {
+      const next = { ...prev, ...updates };
+      if (updates.cabinet_id !== undefined && !updates.cabinet_id) {
+        next.shelf_id = '';
       }
-    } catch (err) {
-      console.error('Failed to load documents', err);
-      setError('Failed to load documents. Please retry.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [query, normalizeDocument]);
-
-  useEffect(() => {
-    fetchFilters();
-  }, [fetchFilters]);
-
+      if (updates.page === undefined) {
+        next.page = 1;
+      }
+      return next;
+    });
+  }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
       setQuery(prev => ({ ...prev, page: 1, search: searchInput.trim() }));
@@ -232,6 +236,10 @@ const Documents: React.FC = () => {
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  useEffect(() => {
+    fetchFilters();
+  }, [fetchFilters]);
 
   useEffect(() => {
     if (!isCreateModalOpen) {
@@ -297,6 +305,52 @@ const Documents: React.FC = () => {
     setIsShelfOpening(false);
   };
 
+  const mapDocumentToForm = (doc: DocumentRecord) => ({
+    reference: doc.reference || '',
+    name: doc.name || '',
+    status: doc.status,
+    cabinet_id: doc.cabinet?.id ? String(doc.cabinet.id) : '',
+    shelf_id: doc.shelfMeta?.id ? String(doc.shelfMeta.id) : '',
+    docket: doc.docket !== null && doc.docket !== undefined ? String(doc.docket) : '',
+    side: doc.side || '',
+    row: doc.row !== null && doc.row !== undefined ? String(doc.row) : doc.row_index !== null && doc.row_index !== undefined ? String(doc.row_index) : '',
+    column:
+      doc.column !== null && doc.column !== undefined
+        ? String(doc.column)
+        : doc.column_index !== null && doc.column_index !== undefined
+        ? String(doc.column_index)
+        : '',
+  });
+
+  const handleEditDocument = (doc: DocumentRecord) => {
+    setEditingDocument(doc);
+    setCreateMode('manual');
+    setCreateForm(mapDocumentToForm(doc));
+    setManualPdfFile(null);
+    setCsvReport(null);
+    setPdfReport(null);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleArchiveDocument = async (doc: DocumentRecord) => {
+    const confirmed = window.confirm(`Archive ${doc.reference}? It will no longer appear in the active list.`);
+    if (!confirmed) return;
+
+    try {
+      setError(null);
+      await axios.delete(`${API_URL}/documents/${doc.id}`);
+      setSuccessMessage(`Document ${doc.reference} archived.`);
+      if (selectedDocument?.id === doc.id) {
+        closeDocumentDetail();
+      }
+      await fetchDocuments();
+    } catch (err: any) {
+      console.error('Failed to archive document', err);
+      const message = err?.response?.data?.message || 'Unable to archive document.';
+      setError(typeof message === 'string' ? message : 'Unable to archive document.');
+    }
+  };
+
   const handleShelfOpen = async () => {
     if (!selectedDocument) return;
     if (!selectedDocument.cabinet?.id || !selectedDocument.shelfMeta?.id) {
@@ -344,12 +398,14 @@ const Documents: React.FC = () => {
   const handleDownloadPdf = () => {
     if (!selectedDocument) return;
 
-    if (!selectedDocument.file_url) {
+    const fileUrl = resolveDocumentFileUrl(selectedDocument.file_url);
+
+    if (!fileUrl) {
       setModalError('No PDF is attached to this document.');
       return;
     }
 
-    window.open(selectedDocument.file_url, '_blank', 'noopener');
+    window.open(fileUrl, '_blank', 'noopener');
   };
 
   const handlePageChange = (direction: 'prev' | 'next') => {
@@ -388,6 +444,7 @@ const Documents: React.FC = () => {
     setPdfReport(null);
     setIsCsvImporting(false);
     setIsPdfImporting(false);
+    setEditingDocument(null);
   };
 
   const handleCreateDocument = async (event: React.FormEvent) => {
@@ -403,6 +460,8 @@ const Documents: React.FC = () => {
       status: createForm.status,
       cabinet_id: Number(createForm.cabinet_id),
     };
+
+    const isEditing = Boolean(editingDocument);
 
     if (createForm.shelf_id) payload.shelf_id = Number(createForm.shelf_id);
     if (createForm.docket) payload.docket = Number(createForm.docket);
@@ -421,19 +480,30 @@ const Documents: React.FC = () => {
           formData.append(key, typeof value === 'number' ? String(value) : value);
         });
         formData.append('pdf', manualPdfFile);
-        await axios.post(`${API_URL}/documents`, formData, {
+
+        if (isEditing && editingDocument) {
+          formData.append('_method', 'PUT');
+        }
+
+        const url = isEditing && editingDocument ? `${API_URL}/documents/${editingDocument.id}` : `${API_URL}/documents`;
+
+        await axios.post(url, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
+      } else if (isEditing && editingDocument) {
+        await axios.put(`${API_URL}/documents/${editingDocument.id}`, payload);
       } else {
         await axios.post(`${API_URL}/documents`, payload);
       }
-      setSuccessMessage('Document recorded successfully.');
+
+      setSuccessMessage(isEditing ? 'Document updated successfully.' : 'Document recorded successfully.');
       closeCreateModal();
-      fetchDocuments();
+      await fetchDocuments();
     } catch (err: any) {
-      console.error('Failed to create document', err);
-      const message = err?.response?.data?.message || 'Unable to create document. Please check the form.';
-      setError(typeof message === 'string' ? message : 'Unable to create document.');
+      console.error('Failed to submit document form', err);
+      const fallbackMessage = isEditing ? 'Unable to update document. Please check the form.' : 'Unable to create document. Please check the form.';
+      const message = err?.response?.data?.message || fallbackMessage;
+      setError(typeof message === 'string' ? message : fallbackMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -695,6 +765,9 @@ const Documents: React.FC = () => {
     return () => clearTimeout(timer);
   }, [successMessage]);
 
+  const isEditingExistingDocument = Boolean(editingDocument);
+  const submitLabel = isEditingExistingDocument ? 'Update Document' : 'Save Document';
+  const submittingLabel = isEditingExistingDocument ? 'Updating…' : 'Saving…';
   const isDocumentUnavailable = selectedDocument ? ['removed', 'taken'].includes(selectedDocument.status) : false;
   const latestRemovalEntry = statusHistory.find(entry => entry.status === 'removed');
   const removalSummary = latestRemovalEntry
@@ -756,61 +829,13 @@ const Documents: React.FC = () => {
         </div>
       </div>
 
-      {showFilters && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="rounded-2xl border border-gray-200 bg-white/90 p-6 shadow dark:border-gray-800 dark:bg-gray-900/80"
-        >
-          <div className="grid gap-4 md:grid-cols-4">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Cabinet</label>
-              <select
-                value={query.cabinet_id}
-                onChange={(event) => setQuery(prev => ({ ...prev, page: 1, cabinet_id: event.target.value, shelf_id: '' }))}
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm"
-              >
-                <option value="">All cabinets</option>
-                {filterOptions.cabinets.map(cabinet => (
-                  <option key={cabinet.id} value={cabinet.id}>{cabinet.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Shelf</label>
-              <select
-                value={query.shelf_id}
-                onChange={(event) => setQuery(prev => ({ ...prev, page: 1, shelf_id: event.target.value }))}
-                disabled={!query.cabinet_id || shelfOptions.length === 0}
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm disabled:opacity-50"
-              >
-                <option value="">All shelves</option>
-                {shelfOptions.map(shelf => (
-                  <option key={shelf.id} value={shelf.id}>{shelf.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">From</label>
-              <input
-                type="date"
-                value={query.from_date}
-                onChange={(event) => setQuery(prev => ({ ...prev, page: 1, from_date: event.target.value }))}
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">To</label>
-              <input
-                type="date"
-                value={query.to_date}
-                onChange={(event) => setQuery(prev => ({ ...prev, page: 1, to_date: event.target.value }))}
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-        </motion.div>
-      )}
+      <DocumentFiltersPanel
+        visible={showFilters}
+        query={query}
+        filterOptions={filterOptions}
+        shelfOptions={shelfOptions}
+        onQueryChange={handleFilterChange}
+      />
 
       {error && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-200">
@@ -833,228 +858,40 @@ const Documents: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="rounded-2xl border border-gray-200 bg-white/95 shadow-lg dark:border-gray-800 dark:bg-gray-900/80"
+          className="w-full"
         >
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-              <thead className="bg-gray-50 dark:bg-gray-800/60">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Cabinet</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Shelf</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Docket / Side</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Updated</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {documents.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-12 text-center text-sm text-gray-500" colSpan={8}>
-                      No documents match the selected filters.
-                    </td>
-                  </tr>
-                ) : (
-                  documents.map(doc => (
-                    <tr key={doc.id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{doc.reference}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{doc.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{doc.cabinet?.name || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        <div className="flex flex-col">
-                          <span>{doc.shelf || '—'}</span>
-                          {(doc.row ?? doc.column) !== null && (
-                            <span className="text-xs text-gray-500">Row {doc.row ?? '—'} · Col {doc.column ?? '—'}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        <div className="flex flex-col">
-                          <span>Docket {doc.docket ?? '—'}</span>
-                          <span>Side {doc.side ?? '—'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[doc.status]}`}>
-                          {doc.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{formatDate(doc.updated_at)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
-                        <button
-                          type="button"
-                          onClick={() => openDocumentDetail(doc)}
-                          className="rounded-lg border border-gray-200 px-3 py-1 font-semibold text-[#012169] hover:bg-[#012169]/10 dark:border-gray-700"
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-col gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-300 md:flex-row md:items-center md:justify-between">
-            <p>
-              Showing {documents.length ? `${pageMeta.from || 0}-${pageMeta.to || documents.length}` : 0} of {pageMeta.total} records
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handlePageChange('prev')}
-                disabled={query.page === 1}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-gray-700"
-              >
-                Previous
-              </button>
-              <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                Page {query.page} of {pageMeta.lastPage}
-              </span>
-              <button
-                onClick={() => handlePageChange('next')}
-                disabled={query.page >= pageMeta.lastPage || documents.length === 0}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-gray-700"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <DocumentTable
+            documents={documents}
+            pageMeta={pageMeta}
+            currentPage={query.page}
+            onPageChange={handlePageChange}
+            onOpenDocument={openDocumentDetail}
+            onEditDocument={handleEditDocument}
+            onArchiveDocument={handleArchiveDocument}
+            formatDate={formatDate}
+          />
         </motion.div>
       )}
 
       {selectedDocument && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Reference</p>
-                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{selectedDocument.reference}</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{selectedDocument.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeDocumentDetail}
-                className="rounded-full p-1 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cabinet</p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">{selectedDocument.cabinet?.name || '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Shelf</p>
-                <p className="text-sm text-gray-900 dark:text-gray-100">{selectedDocument.shelf || selectedDocument.shelf_label || '—'}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</span>
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[selectedDocument.status]}`}>
-                  {statusLabels[selectedDocument.status]}
-                </span>
-              </div>
-            </div>
-
-            {modalError && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-200">
-                {modalError}
-              </div>
-            )}
-
-            {modalSuccess && (
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200">
-                {modalSuccess}
-              </div>
-            )}
-
-            <div
-              className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-                isDocumentUnavailable
-                  ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200'
-                  : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200'
-              }`}
-            >
-              {documentStatusSummary}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleShelfOpen}
-                disabled={!canOpenShelf || isShelfOpening}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow ${
-                  canOpenShelf
-                    ? 'bg-[#012169] text-white'
-                    : 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                } ${isShelfOpening ? 'opacity-70' : ''}`}
-              >
-                {isShelfOpening ? 'Opening…' : 'Open Shelf'}
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={!selectedDocument.file_url}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-              >
-                Download / Read PDF
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              {selectedDocument.status !== 'removed' ? (
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange('removed')}
-                  disabled={isStatusUpdating}
-                  className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
-                >
-                  Mark as Removed
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange('available')}
-                  disabled={isStatusUpdating}
-                  className="rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
-                >
-                  Mark as Available
-                </button>
-              )}
-            </div>
-
-            <div className="mt-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status history</h3>
-                <span className="text-xs text-gray-500 dark:text-gray-400">Most recent first</span>
-              </div>
-              {isHistoryLoading ? (
-                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Loading history…</p>
-              ) : statusHistory.length === 0 ? (
-                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No status changes have been recorded yet.</p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {statusHistory.map(entry => (
-                    <li key={entry.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
-                      <div className="flex items-center justify-between">
-                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyles[entry.status]}`}>
-                          {statusLabels[entry.status]}
-                        </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">{formatStatusTimestamp(entry.created_at)}</span>
-                      </div>
-                      <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                        By {entry.user?.name || 'System'}{entry.note ? ` • ${entry.note}` : ''}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
+        <DocumentDetailModal
+          document={selectedDocument}
+          onClose={closeDocumentDetail}
+          modalError={modalError}
+          modalSuccess={modalSuccess}
+          documentStatusSummary={documentStatusSummary}
+          canOpenShelf={canOpenShelf}
+          isShelfOpening={isShelfOpening}
+          onShelfOpen={handleShelfOpen}
+          onDownloadPdf={handleDownloadPdf}
+          onStatusChange={handleStatusChange}
+          isStatusUpdating={isStatusUpdating}
+          statusHistory={statusHistory}
+          isHistoryLoading={isHistoryLoading}
+          formatStatusTimestamp={formatStatusTimestamp}
+          historyLimit={STATUS_HISTORY_LIMIT}
+          isDocumentUnavailable={isDocumentUnavailable}
+        />
       )}
 
       {isCreateModalOpen && (
@@ -1062,8 +899,12 @@ const Documents: React.FC = () => {
           <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Add Document</h2>
-                <p className="text-sm text-gray-500">Record a single folder or bulk import from templates.</p>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  {isEditingExistingDocument ? 'Edit Document' : 'Add Document'}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {isEditingExistingDocument ? 'Update metadata or replace the attached PDF.' : 'Record a single folder or bulk import from templates.'}
+                </p>
               </div>
               <button
                 type="button"
@@ -1079,20 +920,24 @@ const Documents: React.FC = () => {
                 { key: 'manual', label: 'Manual Entry' },
                 { key: 'upload', label: 'Upload CSV/Excel' },
                 { key: 'pdf', label: 'PDF Roadmap' },
-              ].map(mode => (
-                <button
-                  key={mode.key}
-                  type="button"
-                  onClick={() => setCreateMode(mode.key as 'manual' | 'upload' | 'pdf')}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
-                    createMode === mode.key
-                      ? 'bg-[#012169] text-white border-[#012169]'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {mode.label}
-                </button>
-              ))}
+              ].map(mode => {
+                const isModeDisabled = isEditingExistingDocument && mode.key !== 'manual';
+                return (
+                  <button
+                    key={mode.key}
+                    type="button"
+                    onClick={() => setCreateMode(mode.key as 'manual' | 'upload' | 'pdf')}
+                    className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                      createMode === mode.key
+                        ? 'bg-[#012169] text-white border-[#012169]'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:text-gray-300'
+                    } ${isModeDisabled ? 'cursor-not-allowed opacity-50' : ''}`}
+                    disabled={isModeDisabled}
+                  >
+                    {mode.label}
+                  </button>
+                );
+              })}
             </div>
 
             {createMode === 'manual' && (
@@ -1250,7 +1095,7 @@ const Documents: React.FC = () => {
                     disabled={isSubmitting}
                     className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#012169] px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {isSubmitting ? 'Saving…' : 'Save Document'}
+                    {isSubmitting ? submittingLabel : submitLabel}
                   </button>
                 </div>
               </form>
