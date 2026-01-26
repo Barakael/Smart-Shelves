@@ -14,15 +14,6 @@ import templateUrl from '../resources/images/eShelfTemplate.csv?url';
 
 const API_URL = getApiUrl();
 const BULK_API_URL = getBulkServiceUrl();
-const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
-const resolveDocumentFileUrl = (fileUrl?: string | null): string | null => {
-  if (!fileUrl) return null;
-  if (/^https?:\/\//i.test(fileUrl)) {
-    return fileUrl;
-  }
-  const normalized = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
-  return `${API_ORIGIN}${normalized}`;
-};
 const ITEMS_PER_PAGE = 10;
 const STATUS_HISTORY_LIMIT = 3;
 const DOCUMENTS_LOAD_ERROR = 'Unable to load documents. Please try again.';
@@ -395,17 +386,38 @@ const Documents: React.FC = () => {
     }
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!selectedDocument) return;
 
-    const fileUrl = resolveDocumentFileUrl(selectedDocument.file_url);
-
-    if (!fileUrl) {
+    if (!selectedDocument.has_file) {
       setModalError('No PDF is attached to this document.');
       return;
     }
 
-    window.open(fileUrl, '_blank', 'noopener');
+    try {
+      const { data } = await axios.get(`${API_URL}/documents/${selectedDocument.id}/file`, {
+        responseType: 'blob',
+      });
+
+      const blobUrl = URL.createObjectURL(data);
+      const newWindow = window.open(blobUrl, '_blank', 'noopener');
+
+      if (!newWindow) {
+        URL.revokeObjectURL(blobUrl);
+        setModalError('Popup blocked. Allow popups to view the PDF.');
+        return;
+      }
+
+      const revoke = () => {
+        URL.revokeObjectURL(blobUrl);
+        newWindow.removeEventListener('load', revoke);
+      };
+      newWindow.addEventListener('load', revoke);
+    } catch (err: any) {
+      console.error('Failed to open document PDF', err);
+      const message = err?.response?.data?.message || 'Unable to open document PDF.';
+      setModalError(typeof message === 'string' ? message : 'Unable to open document PDF.');
+    }
   };
 
   const handlePageChange = (direction: 'prev' | 'next') => {

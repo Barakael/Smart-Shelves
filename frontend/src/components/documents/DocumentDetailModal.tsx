@@ -6,16 +6,6 @@ import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../.
 import { statusLabels, statusStyles } from './statusConfig';
 
 const API_URL = getApiUrl();
-const API_ORIGIN = API_URL.replace(/\/api\/?$/, '');
-
-const buildAbsoluteFileUrl = (fileUrl?: string | null): string | null => {
-  if (!fileUrl) return null;
-  if (/^https?:\/\//i.test(fileUrl)) {
-    return fileUrl;
-  }
-  const normalizedPath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
-  return `${API_ORIGIN}${normalizedPath}`;
-};
 
 interface DocumentDetailModalProps {
   document: DocumentRecord;
@@ -59,15 +49,15 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
     [statusHistory, historyLimit]
   );
   const hasHiddenHistory = statusHistory.length > visibleStatusHistory.length;
-  const resolvedFileUrl = useMemo(() => buildAbsoluteFileUrl(document.file_url), [document.file_url]);
-  const hasFile = Boolean(resolvedFileUrl);
+  const fileEndpoint = useMemo(() => `${API_URL}/documents/${document.id}/file`, [document.id]);
+  const hasFile = Boolean(document.has_file);
   const fileLabel = document.file_original_name || 'PDF attachment';
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!hasFile || !resolvedFileUrl) {
+    if (!hasFile) {
       setPreviewUrl(null);
       setPreviewError(null);
       return;
@@ -82,7 +72,7 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
       setPreviewUrl(null);
 
       try {
-        const response = await axios.get(resolvedFileUrl, {
+        const response = await axios.get(fileEndpoint, {
           responseType: 'blob',
         });
 
@@ -115,7 +105,7 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [hasFile, resolvedFileUrl]);
+  }, [fileEndpoint, hasFile]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8">
