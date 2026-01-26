@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { Download, Filter, PlusCircle, RefreshCw, Search, UploadCloud, X } from 'lucide-react';
-import { DocumentRecord, DocumentStatus } from '../types/documents';
-import { getApiUrl } from '../config/environment';
+import { Download, Filter, FileArchive, Paperclip, PlusCircle, RefreshCw, Search, Trash2, UploadCloud, X } from 'lucide-react';
+import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../types/documents';
+import { getApiUrl, getBulkServiceUrl } from '../config/environment';
 import templateUrl from '../resources/images/eShelfTemplate.csv?url';
 
 const API_URL = getApiUrl();
+const BULK_API_URL = getBulkServiceUrl();
 const ITEMS_PER_PAGE = 10;
 const DEFAULT_STATUSES: DocumentStatus[] = ['available', 'taken', 'returned', 'removed'];
 
@@ -57,6 +58,13 @@ const statusStyles: Record<DocumentStatus, string> = {
   removed: 'bg-rose-50 text-rose-800 border border-rose-200',
 };
 
+const statusLabels: Record<DocumentStatus, string> = {
+  available: 'Available',
+  taken: 'Taken',
+  returned: 'Returned',
+  removed: 'Removed',
+};
+
 const normalizeStatus = (value?: string): DocumentStatus => {
   const normalized = (value || '').trim().toLowerCase();
   if (normalized === 'taken' || normalized === 'returned' || normalized === 'removed') {
@@ -79,6 +87,14 @@ const toNumberOrUndefined = (value?: string | number | null) => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
+const formatFileSize = (bytes: number): string => {
+  if (!bytes) return '0 B';
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${(bytes / 1024).toFixed(1)} KB`;
+};
+
 const Documents: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,10 +103,13 @@ const Documents: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createMode, setCreateMode] = useState<'manual' | 'csv' | 'excel'>('manual');
+  const [createMode, setCreateMode] = useState<'manual' | 'upload' | 'pdf'>('manual');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [bulkReport, setBulkReport] = useState<string | null>(null);
-  const [isBulkImporting, setIsBulkImporting] = useState(false);
+  const [csvReport, setCsvReport] = useState<string | null>(null);
+  const [pdfReport, setPdfReport] = useState<string | null>(null);
+  const [isCsvImporting, setIsCsvImporting] = useState(false);
+  const [isPdfImporting, setIsPdfImporting] = useState(false);
+  const [manualPdfFile, setManualPdfFile] = useState<File | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [query, setQuery] = useState({
     page: 1,
@@ -112,12 +131,19 @@ const Documents: React.FC = () => {
     status: 'available' as DocumentStatus,
     cabinet_id: '',
     shelf_id: '',
-    shelf_label: '',
     docket: '',
     side: '',
     row: '',
     column: '',
   });
+  const [selectedDocument, setSelectedDocument] = useState<DocumentRecord | null>(null);
+  const [statusHistory, setStatusHistory] = useState<DocumentStatusHistoryEntry[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isShelfOpening, setIsShelfOpening] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+  const [isStatusUpdating, setIsStatusUpdating] = useState(false);
+  const isBulkServiceEnabled = Boolean(BULK_API_URL);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -132,7 +158,7 @@ const Documents: React.FC = () => {
     }
   }, []);
 
-  const normalizeDocument = (doc: any): DocumentRecord => ({
+  const normalizeDocument = useCallback((doc: any): DocumentRecord => ({
     id: doc.id,
     reference: doc.reference,
     name: doc.name,
@@ -147,12 +173,15 @@ const Documents: React.FC = () => {
     row_index: doc.row_index ?? null,
     column_index: doc.column_index ?? null,
     metadata: doc.metadata ?? null,
+    file_url: doc.file_url ?? null,
+    file_original_name: doc.file_original_name ?? null,
+    has_file: Boolean(doc.has_file ?? doc.file_path),
     created_at: doc.created_at,
     updated_at: doc.updated_at,
     cabinet: doc.cabinet ? { id: doc.cabinet.id, name: doc.cabinet.name } : null,
     shelfMeta: doc.shelf ? { id: doc.shelf.id, name: doc.shelf.name } : null,
     room: doc.room ? { id: doc.room.id, name: doc.room.name } : null,
-  });
+  }), []);
 
   const fetchDocuments = useCallback(async () => {
     setIsLoading(true);
@@ -187,7 +216,7 @@ const Documents: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, normalizeDocument]);
 
   useEffect(() => {
     fetchFilters();
@@ -206,9 +235,12 @@ const Documents: React.FC = () => {
 
   useEffect(() => {
     if (!isCreateModalOpen) {
-      setBulkReport(null);
+      setCsvReport(null);
+      setPdfReport(null);
       setCreateMode('manual');
-      setIsBulkImporting(false);
+      setIsCsvImporting(false);
+      setIsPdfImporting(false);
+      setManualPdfFile(null);
     }
   }, [isCreateModalOpen]);
 
@@ -223,6 +255,102 @@ const Documents: React.FC = () => {
     const cabinet = filterOptions.cabinets.find(cab => String(cab.id) === createForm.cabinet_id);
     return cabinet?.shelves ?? [];
   }, [createForm.cabinet_id, filterOptions.cabinets]);
+
+  const fetchDocumentDetails = useCallback(async (documentId: string | number) => {
+    try {
+      const { data } = await axios.get(`${API_URL}/documents/${documentId}`);
+      const normalized = normalizeDocument(data);
+      setDocuments(prev => prev.map(doc => (doc.id === normalized.id ? normalized : doc)));
+      setSelectedDocument(prev => (prev && prev.id === normalized.id ? normalized : prev));
+    } catch (err) {
+      console.error('Failed to refresh document', err);
+    }
+  }, [normalizeDocument]);
+
+  const fetchStatusHistory = useCallback(async (documentId: string | number) => {
+    setIsHistoryLoading(true);
+    try {
+      const { data } = await axios.get<DocumentStatusHistoryEntry[]>(`${API_URL}/documents/${documentId}/status-history`);
+      setStatusHistory(data);
+    } catch (err) {
+      console.error('Failed to load status history', err);
+      setModalError('Unable to load status history.');
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, []);
+
+  const openDocumentDetail = (doc: DocumentRecord) => {
+    setSelectedDocument(doc);
+    setStatusHistory([]);
+    setModalError(null);
+    setModalSuccess(null);
+    fetchDocumentDetails(doc.id);
+    fetchStatusHistory(doc.id);
+  };
+
+  const closeDocumentDetail = () => {
+    setSelectedDocument(null);
+    setStatusHistory([]);
+    setModalError(null);
+    setModalSuccess(null);
+    setIsShelfOpening(false);
+  };
+
+  const handleShelfOpen = async () => {
+    if (!selectedDocument) return;
+    if (!selectedDocument.cabinet?.id || !selectedDocument.shelfMeta?.id) {
+      setModalError('Shelf metadata is missing for this document.');
+      return;
+    }
+
+    setIsShelfOpening(true);
+    setModalError(null);
+    setModalSuccess(null);
+
+    try {
+      await axios.post(`${API_URL}/cabinets/${selectedDocument.cabinet.id}/shelves/${selectedDocument.shelfMeta.id}/open`);
+      setModalSuccess(`Shelf ${selectedDocument.shelf || selectedDocument.shelfMeta.name || ''} opened successfully.`);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Failed to open shelf.';
+      setModalError(message);
+    } finally {
+      setIsShelfOpening(false);
+    }
+  };
+
+  const handleStatusChange = async (status: DocumentStatus) => {
+    if (!selectedDocument) return;
+
+    setIsStatusUpdating(true);
+    setModalError(null);
+    setModalSuccess(null);
+
+    try {
+      const { data } = await axios.put(`${API_URL}/documents/${selectedDocument.id}`, { status });
+      const normalized = normalizeDocument(data);
+      setDocuments(prev => prev.map(doc => (doc.id === normalized.id ? normalized : doc)));
+      setSelectedDocument(normalized);
+      setModalSuccess(`Status updated to ${statusLabels[status]}.`);
+      await fetchStatusHistory(normalized.id);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || 'Unable to update status.';
+      setModalError(message);
+    } finally {
+      setIsStatusUpdating(false);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    if (!selectedDocument) return;
+
+    if (!selectedDocument.file_url) {
+      setModalError('No PDF is attached to this document.');
+      return;
+    }
+
+    window.open(selectedDocument.file_url, '_blank', 'noopener');
+  };
 
   const handlePageChange = (direction: 'prev' | 'next') => {
     setQuery(prev => {
@@ -244,20 +372,22 @@ const Documents: React.FC = () => {
       status: 'available',
       cabinet_id: '',
       shelf_id: '',
-      shelf_label: '',
       docket: '',
       side: '',
       row: '',
       column: '',
     });
+    setManualPdfFile(null);
   };
 
   const closeCreateModal = () => {
     setIsCreateModalOpen(false);
     resetCreateForm();
     setCreateMode('manual');
-    setBulkReport(null);
-    setIsBulkImporting(false);
+    setCsvReport(null);
+    setPdfReport(null);
+    setIsCsvImporting(false);
+    setIsPdfImporting(false);
   };
 
   const handleCreateDocument = async (event: React.FormEvent) => {
@@ -275,7 +405,6 @@ const Documents: React.FC = () => {
     };
 
     if (createForm.shelf_id) payload.shelf_id = Number(createForm.shelf_id);
-    if (createForm.shelf_label.trim()) payload.shelf_label = createForm.shelf_label.trim();
     if (createForm.docket) payload.docket = Number(createForm.docket);
     if (createForm.side) payload.side = createForm.side as 'L' | 'R';
     if (createForm.row) payload.row_index = Number(createForm.row);
@@ -284,7 +413,20 @@ const Documents: React.FC = () => {
     try {
       setIsSubmitting(true);
       setError(null);
-      await axios.post(`${API_URL}/documents`, payload);
+
+      if (manualPdfFile) {
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+          if (value === undefined || value === null) return;
+          formData.append(key, typeof value === 'number' ? String(value) : value);
+        });
+        formData.append('pdf', manualPdfFile);
+        await axios.post(`${API_URL}/documents`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await axios.post(`${API_URL}/documents`, payload);
+      }
       setSuccessMessage('Document recorded successfully.');
       closeCreateModal();
       fetchDocuments();
@@ -353,13 +495,13 @@ const Documents: React.FC = () => {
     return { prepared, rowErrors };
   };
 
-  const importBulkDocuments = async (prepared: PreparedDocumentPayload[], validationErrors: string[]) => {
+  const importCsvDocuments = async (prepared: PreparedDocumentPayload[], validationErrors: string[]) => {
     if (!prepared.length && validationErrors.length) {
-      setBulkReport(validationErrors.join('\n'));
+      setCsvReport(validationErrors.join('\n'));
       return;
     }
 
-    setIsBulkImporting(true);
+    setIsCsvImporting(true);
     setError(null);
 
     const failureMessages = [...validationErrors];
@@ -386,13 +528,13 @@ const Documents: React.FC = () => {
       summary.push(...failureMessages);
     }
 
-    setBulkReport(summary.join('\n'));
-    setIsBulkImporting(false);
+    setCsvReport(summary.join('\n'));
+    setIsCsvImporting(false);
   };
 
   const ingestStructuredRows = async (rows: (string | number)[][]) => {
     if (!rows.length) {
-      setBulkReport('Uploaded file does not contain any data.');
+      setCsvReport('Uploaded file does not contain any data.');
       return;
     }
 
@@ -400,7 +542,7 @@ const Documents: React.FC = () => {
     const [headerRow, ...dataRows] = sanitized;
 
     if (!headerRow || !headerRow.length) {
-      setBulkReport('Uploaded file is missing a header row.');
+      setCsvReport('Uploaded file is missing a header row.');
       return;
     }
 
@@ -417,12 +559,12 @@ const Documents: React.FC = () => {
       });
 
     if (!records.length) {
-      setBulkReport('No data rows detected in the uploaded file.');
+      setCsvReport('No data rows detected in the uploaded file.');
       return;
     }
 
     const { prepared, rowErrors } = mapRecordsToPayloads(records);
-    await importBulkDocuments(prepared, rowErrors);
+    await importCsvDocuments(prepared, rowErrors);
   };
 
   const handleCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -436,7 +578,7 @@ const Documents: React.FC = () => {
       await ingestStructuredRows(rows);
     } catch (err) {
       console.error('Unable to parse CSV file', err);
-      setBulkReport('Unable to parse CSV file. Ensure it matches the template.');
+      setCsvReport('Unable to parse CSV file. Ensure it matches the template.');
     } finally {
       event.target.value = '';
     }
@@ -453,7 +595,7 @@ const Documents: React.FC = () => {
       await ingestStructuredRows(rows);
     } catch (err) {
       console.error('Unable to parse Excel file', err);
-      setBulkReport('Unable to parse Excel file. Please ensure it is a valid .xlsx workbook.');
+      setCsvReport('Unable to parse Excel file. Please ensure it is a valid .xlsx workbook.');
     } finally {
       event.target.value = '';
     }
@@ -466,9 +608,85 @@ const Documents: React.FC = () => {
     XLSX.writeFile(workbook, 'SmartShelvesDocumentsTemplate.xlsx');
   };
 
+  const handleManualPdfSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setError('Only PDF files can be attached.');
+      event.target.value = '';
+      return;
+    }
+
+    setManualPdfFile(file);
+    event.target.value = '';
+  };
+
+  const handleRemoveManualPdf = () => {
+    setManualPdfFile(null);
+  };
+
+  const handlePdfRoadmapUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    if (!BULK_API_URL) {
+      setPdfReport('Bulk PDF service URL is not configured.');
+      event.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('archive', file);
+
+    try {
+      setIsPdfImporting(true);
+      setPdfReport('Uploading and processing archive…');
+      const { data } = await axios.post(`${BULK_API_URL}/bulk-import`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const summaryLines: string[] = [
+        `Manifest rows: ${data.total_manifest_rows ?? 'n/a'}`,
+        `Imported: ${data.imported_count ?? 0}`,
+      ];
+
+      if (Array.isArray(data.skipped_rows) && data.skipped_rows.length) {
+        summaryLines.push('Issues:', ...data.skipped_rows.map((issue: string) => `• ${issue}`));
+      }
+
+      if (Array.isArray(data.imported_documents) && data.imported_documents.length) {
+        summaryLines.push('Imported documents:');
+        summaryLines.push(
+          ...data.imported_documents.map((doc: any) => `• ${doc.reference || doc.name} (Shelf ${doc.shelf_name ?? doc.shelf_id})`)
+        );
+      }
+
+      setPdfReport(summaryLines.join('\n'));
+      await fetchDocuments();
+      setSuccessMessage('Bulk PDF archive processed successfully.');
+    } catch (err: any) {
+      console.error('Unable to process PDF archive', err);
+      const detail = err?.response?.data?.detail || err?.response?.data?.message || 'Bulk PDF upload failed.';
+      setPdfReport(`Bulk upload failed: ${detail}`);
+    } finally {
+      setIsPdfImporting(false);
+      event.target.value = '';
+    }
+  };
+
   const formatDate = (value?: string) => {
     if (!value) return '—';
     return new Date(value).toLocaleString();
+  };
+
+  const formatStatusTimestamp = (value?: string) => {
+    if (!value) return '—';
+    return new Date(value).toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
   };
 
   useEffect(() => {
@@ -476,6 +694,22 @@ const Documents: React.FC = () => {
     const timer = setTimeout(() => setSuccessMessage(null), 5000);
     return () => clearTimeout(timer);
   }, [successMessage]);
+
+  const isDocumentUnavailable = selectedDocument ? ['removed', 'taken'].includes(selectedDocument.status) : false;
+  const latestRemovalEntry = statusHistory.find(entry => entry.status === 'removed');
+  const removalSummary = latestRemovalEntry
+    ? `${statusLabels[latestRemovalEntry.status]} ${formatStatusTimestamp(latestRemovalEntry.created_at)}${
+        latestRemovalEntry.user ? ` by ${latestRemovalEntry.user.name}` : ''
+      }${latestRemovalEntry.note ? ` • ${latestRemovalEntry.note}` : ''}`
+    : 'status marked as removed';
+  const canOpenShelf = Boolean(
+    selectedDocument?.cabinet?.id &&
+      selectedDocument?.shelfMeta?.id &&
+      !isDocumentUnavailable
+  );
+  const documentStatusSummary = isDocumentUnavailable
+    ? `Physical copy is currently out of the shelf (${removalSummary}).`
+    : 'Physical copy is available for retrieval.';
 
   return (
     <div className="space-y-6">
@@ -612,12 +846,13 @@ const Documents: React.FC = () => {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Docket / Side</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Updated</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {documents.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-12 text-center text-sm text-gray-500" colSpan={7}>
+                    <td className="px-4 py-12 text-center text-sm text-gray-500" colSpan={8}>
                       No documents match the selected filters.
                     </td>
                   </tr>
@@ -647,6 +882,15 @@ const Documents: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{formatDate(doc.updated_at)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">
+                        <button
+                          type="button"
+                          onClick={() => openDocumentDetail(doc)}
+                          className="rounded-lg border border-gray-200 px-3 py-1 font-semibold text-[#012169] hover:bg-[#012169]/10 dark:border-gray-700"
+                        >
+                          View
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -680,6 +924,139 @@ const Documents: React.FC = () => {
         </motion.div>
       )}
 
+      {selectedDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Reference</p>
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{selectedDocument.reference}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{selectedDocument.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeDocumentDetail}
+                className="rounded-full p-1 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Cabinet</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">{selectedDocument.cabinet?.name || '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Shelf</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100">{selectedDocument.shelf || selectedDocument.shelf_label || '—'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</span>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[selectedDocument.status]}`}>
+                  {statusLabels[selectedDocument.status]}
+                </span>
+              </div>
+            </div>
+
+            {modalError && (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-200">
+                {modalError}
+              </div>
+            )}
+
+            {modalSuccess && (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200">
+                {modalSuccess}
+              </div>
+            )}
+
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                isDocumentUnavailable
+                  ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200'
+              }`}
+            >
+              {documentStatusSummary}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleShelfOpen}
+                disabled={!canOpenShelf || isShelfOpening}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold shadow ${
+                  canOpenShelf
+                    ? 'bg-[#012169] text-white'
+                    : 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                } ${isShelfOpening ? 'opacity-70' : ''}`}
+              >
+                {isShelfOpening ? 'Opening…' : 'Open Shelf'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={!selectedDocument.file_url}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Download / Read PDF
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              {selectedDocument.status !== 'removed' ? (
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange('removed')}
+                  disabled={isStatusUpdating}
+                  className="rounded-xl border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+                >
+                  Mark as Removed
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleStatusChange('available')}
+                  disabled={isStatusUpdating}
+                  className="rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
+                >
+                  Mark as Available
+                </button>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status history</h3>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Most recent first</span>
+              </div>
+              {isHistoryLoading ? (
+                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Loading history…</p>
+              ) : statusHistory.length === 0 ? (
+                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">No status changes have been recorded yet.</p>
+              ) : (
+                <ul className="mt-3 space-y-3">
+                  {statusHistory.map(entry => (
+                    <li key={entry.id} className="rounded-xl border border-gray-200 p-3 dark:border-gray-800">
+                      <div className="flex items-center justify-between">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyles[entry.status]}`}>
+                          {statusLabels[entry.status]}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{formatStatusTimestamp(entry.created_at)}</span>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                        By {entry.user?.name || 'System'}{entry.note ? ` • ${entry.note}` : ''}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-800 dark:bg-gray-900">
@@ -700,13 +1077,13 @@ const Documents: React.FC = () => {
             <div className="flex gap-2 mb-4">
               {[
                 { key: 'manual', label: 'Manual Entry' },
-                { key: 'csv', label: 'Upload CSV' },
-                { key: 'excel', label: 'Upload Excel' },
+                { key: 'upload', label: 'Upload CSV/Excel' },
+                { key: 'pdf', label: 'PDF Roadmap' },
               ].map(mode => (
                 <button
                   key={mode.key}
                   type="button"
-                  onClick={() => setCreateMode(mode.key as 'manual' | 'csv' | 'excel')}
+                  onClick={() => setCreateMode(mode.key as 'manual' | 'upload' | 'pdf')}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
                     createMode === mode.key
                       ? 'bg-[#012169] text-white border-[#012169]'
@@ -718,7 +1095,7 @@ const Documents: React.FC = () => {
               ))}
             </div>
 
-            {createMode === 'manual' ? (
+            {createMode === 'manual' && (
               <form className="space-y-4" onSubmit={handleCreateDocument}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
@@ -768,18 +1145,6 @@ const Documents: React.FC = () => {
                         <option key={shelf.id} value={shelf.id}>{shelf.name}</option>
                       ))}
                     </select>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Shelf label</label>
-                    <input
-                      type="text"
-                      value={createForm.shelf_label}
-                      onChange={(event) => setCreateForm(prev => ({ ...prev, shelf_label: event.target.value }))}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"
-                    />
                   </div>
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</label>
@@ -843,6 +1208,35 @@ const Documents: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Attach PDF (optional)</label>
+                  {manualPdfFile ? (
+                    <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-800/60">
+                      <div className="flex items-center gap-3">
+                        <Paperclip className="h-4 w-4 text-gray-500" />
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-gray-800 dark:text-gray-100">{manualPdfFile.name}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{formatFileSize(manualPdfFile.size)}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveManualPdf}
+                        className="text-red-600 hover:text-red-700 dark:text-red-400"
+                        aria-label="Remove attached PDF"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 p-4 text-center text-sm font-semibold text-[#012169] hover:border-[#012169] dark:border-gray-600">
+                      <UploadCloud className="h-5 w-5" />
+                      <span>Attach PDF</span>
+                      <input type="file" accept="application/pdf" className="hidden" onChange={handleManualPdfSelection} />
+                    </label>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-end gap-3 pt-2">
                   <button
                     type="button"
@@ -860,25 +1254,35 @@ const Documents: React.FC = () => {
                   </button>
                 </div>
               </form>
-            ) : (
+            )}
+
+            {createMode === 'upload' && (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Upload the template with columns {TEMPLATE_HEADERS.join(', ')}. The sample already lists areas area-1 through area-4 with their shelves.
+                  Upload a CSV or Excel file with columns {TEMPLATE_HEADERS.join(', ')}. The sample already lists areas area-1 through area-4 with their shelves.
                 </p>
-                {bulkReport && (
+                {csvReport && (
                   <pre className="max-h-48 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                    {bulkReport}
+                    {csvReport}
                   </pre>
                 )}
                 <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center text-sm font-semibold text-[#012169] hover:border-[#012169]">
                   <UploadCloud className="h-6 w-6" />
-                  <span>{isBulkImporting ? 'Importing…' : createMode === 'csv' ? 'Choose CSV File' : 'Choose Excel File'}</span>
+                  <span>{isCsvImporting ? 'Importing…' : 'Choose CSV or Excel File'}</span>
                   <input
                     type="file"
-                    accept={createMode === 'csv' ? '.csv' : '.xlsx,.xls'}
+                    accept=".csv,.xlsx,.xls"
                     className="hidden"
-                    onChange={createMode === 'csv' ? handleCsvUpload : handleExcelUpload}
-                    disabled={isBulkImporting}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.name.endsWith('.csv')) {
+                        handleCsvUpload(e);
+                      } else {
+                        handleExcelUpload(e);
+                      }
+                    }}
+                    disabled={isCsvImporting}
                   />
                 </label>
                 <div className="flex flex-wrap gap-3 text-sm font-semibold text-[#012169]">
@@ -891,6 +1295,35 @@ const Documents: React.FC = () => {
                     Download Excel template
                   </button>
                 </div>
+              </div>
+            )}
+
+            {createMode === 'pdf' && (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Upload a ZIP archive that includes your manifest (.csv/.xlsx) plus every referenced PDF. The manifest must match the Bulk PDF service requirements.
+                </p>
+                {pdfReport && (
+                  <pre className="max-h-48 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                    {pdfReport}
+                  </pre>
+                )}
+                <label className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center text-sm font-semibold text-[#012169] hover:border-[#012169]">
+                  <FileArchive className="h-6 w-6" />
+                  <span>{isPdfImporting ? 'Processing…' : 'Choose ZIP Archive'}</span>
+                  <input
+                    type="file"
+                    accept=".zip"
+                    className="hidden"
+                    onChange={handlePdfRoadmapUpload}
+                    disabled={!isBulkServiceEnabled || isPdfImporting}
+                  />
+                </label>
+                {!isBulkServiceEnabled && (
+                  <p className="text-sm text-red-600">
+                    Configuration error: Bulk PDF service URL is not set up.
+                  </p>
+                )}
               </div>
             )}
           </div>
