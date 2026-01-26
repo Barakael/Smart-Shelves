@@ -56,6 +56,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Documents
     Route::get('/documents/filters', [DocumentController::class, 'filters']);
+    Route::get('/documents/{document}/status-history', [DocumentController::class, 'statusHistory']);
     Route::apiResource('documents', DocumentController::class)->except(['create', 'edit']);
 });
 
