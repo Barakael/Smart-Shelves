@@ -23,6 +23,7 @@ export interface DocumentRecord {
   file_url?: string | null;
   file_original_name?: string | null;
   has_file?: boolean;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
   cabinet?: MinimalRelation | null;
