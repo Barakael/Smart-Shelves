@@ -202,6 +202,44 @@ class DocumentController extends Controller
         return response()->json($history);
     }
 
+    public function download(Request $request, Document $document)
+    {
+        if ($response = $this->guardRoomAccess($request, $document->room_id)) {
+            return $response;
+        }
+
+        if (!$document->file_path) {
+            return response()->json(['message' => 'Document does not have an attached file.'], 404);
+        }
+
+        $diskName = $document->file_disk ?: config('filesystems.default', 'local');
+        $disk = Storage::disk($diskName);
+
+        if (!$disk->exists($document->file_path)) {
+            return response()->json(['message' => 'Document file not found.'], 404);
+        }
+
+        $stream = $disk->readStream($document->file_path);
+
+        if ($stream === false) {
+            return response()->json(['message' => 'Unable to read document file.'], 500);
+        }
+
+            $filename = $document->file_original_name ?: basename($document->file_path);
+            $filename = str_replace('"', "'", $filename);
+
+        return response()->stream(function () use ($stream) {
+            fpassthru($stream);
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => $document->file_mime_type ?: 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $filename . '"',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
+    }
+
     private function validateDocument(Request $request, ?Document $document = null): array
     {
         $cabinetId = $request->get('cabinet_id', $document?->cabinet_id);
