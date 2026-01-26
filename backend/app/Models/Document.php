@@ -30,6 +30,7 @@ class Document extends Model
         'file_original_name',
         'file_mime_type',
         'file_size',
+        'is_active',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class Document extends Model
         'column_index' => 'integer',
         'metadata' => 'array',
         'file_size' => 'integer',
+        'is_active' => 'boolean',
     ];
 
     protected $appends = [

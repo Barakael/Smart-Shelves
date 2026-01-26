@@ -24,6 +24,13 @@ class DocumentController extends Controller
         $query = Document::with(['cabinet', 'shelf', 'room'])
             ->orderByDesc('updated_at');
 
+        $includeInactive = filter_var($request->get('include_inactive', false), FILTER_VALIDATE_BOOLEAN);
+        if (!$includeInactive) {
+            $query->where('is_active', true);
+        } elseif ($request->filled('is_active')) {
+            $query->where('is_active', (bool) $request->boolean('is_active'));
+        }
+
         if ($user->isOperator()) {
             $roomIds = $user->rooms->pluck('id');
             if ($roomIds->isEmpty()) {
@@ -74,6 +81,7 @@ class DocumentController extends Controller
     public function store(Request $request)
     {
         $data = $this->validateDocument($request);
+        $data['is_active'] = array_key_exists('is_active', $data) ? (bool) $data['is_active'] : true;
         $cabinet = Cabinet::findOrFail($data['cabinet_id']);
 
         if ($response = $this->guardRoomAccess($request, $cabinet->room_id)) {
@@ -115,6 +123,7 @@ class DocumentController extends Controller
         $this->enforceShelfOwnership($data, $cabinet);
         $data['room_id'] = $cabinet->room_id;
         $data['status'] = $data['status'] ?? $document->status;
+        $data['is_active'] = array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $document->is_active;
 
         $fileAttributes = $this->handlePdfUpload($request, $document);
 
@@ -135,12 +144,13 @@ class DocumentController extends Controller
         if ($response = $this->guardRoomAccess($request, $document->room_id)) {
             return $response;
         }
+        if (!$document->is_active) {
+            return response()->json(['message' => 'Document already inactive.']);
+        }
 
-        $this->deleteDocumentFile($document);
+        $document->update(['is_active' => false]);
 
-        $document->delete();
-
-        return response()->json(['message' => 'Document removed']);
+        return response()->json(['message' => 'Document archived']);
     }
 
     public function filters(Request $request): JsonResponse
@@ -170,7 +180,6 @@ class DocumentController extends Controller
         }
 
         $cabinets = $cabinetQuery->get(['id', 'name', 'room_id']);
-
         return response()->json([
             'rooms' => $rooms,
             'cabinets' => $cabinets,
@@ -205,8 +214,8 @@ class DocumentController extends Controller
         }
 
         $rules = [
-            'reference' => ['required', 'string', 'max:255', $uniqueRule],
-            'name' => ['required', 'string', 'max:255'],
+            'reference' => [$document ? 'sometimes' : 'required', 'string', 'max:255', $uniqueRule],
+            'name' => [$document ? 'sometimes' : 'required', 'string', 'max:255'],
             'status' => ['sometimes', Rule::in(self::STATUSES)],
             'shelf_label' => ['nullable', 'string', 'max:255'],
             'docket' => ['nullable', 'integer', 'min:0'],
@@ -216,6 +225,7 @@ class DocumentController extends Controller
             'cabinet_id' => [$document ? 'sometimes' : 'required', 'exists:cabinets,id'],
             'shelf_id' => ['nullable', 'exists:shelves,id'],
             'metadata' => ['nullable', 'array'],
+            'is_active' => ['sometimes', 'boolean'],
             'pdf' => ['nullable', 'file', 'mimetypes:application/pdf'],
         ];
 
