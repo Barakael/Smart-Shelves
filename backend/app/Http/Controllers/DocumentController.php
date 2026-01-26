@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Cabinet;
 use App\Models\Document;
+use App\Models\DocumentStatusHistory;
 use App\Models\Room;
 use App\Models\Shelf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -82,7 +84,11 @@ class DocumentController extends Controller
         $data['room_id'] = $cabinet->room_id;
         $data['status'] = $data['status'] ?? 'available';
 
-        $document = Document::create($data);
+        $fileAttributes = $this->handlePdfUpload($request);
+
+        $document = Document::create(array_merge($data, $fileAttributes));
+
+        $this->recordStatusHistory($document, $document->status, $request->user()?->id, 'Document created');
 
         return response()->json($document->load(['cabinet', 'shelf', 'room']), 201);
     }
@@ -110,9 +116,18 @@ class DocumentController extends Controller
         $data['room_id'] = $cabinet->room_id;
         $data['status'] = $data['status'] ?? $document->status;
 
-        $document->update($data);
+        $fileAttributes = $this->handlePdfUpload($request, $document);
 
-        return response()->json($document->fresh()->load(['cabinet', 'shelf', 'room']));
+        $originalStatus = $document->status;
+
+        $document->update(array_merge($data, $fileAttributes));
+        $document->refresh();
+
+        if ($originalStatus !== $document->status) {
+            $this->recordStatusHistory($document, $document->status, $request->user()?->id);
+        }
+
+        return response()->json($document->load(['cabinet', 'shelf', 'room']));
     }
 
     public function destroy(Request $request, Document $document)
@@ -120,6 +135,8 @@ class DocumentController extends Controller
         if ($response = $this->guardRoomAccess($request, $document->room_id)) {
             return $response;
         }
+
+        $this->deleteDocumentFile($document);
 
         $document->delete();
 
@@ -161,6 +178,21 @@ class DocumentController extends Controller
         ]);
     }
 
+    public function statusHistory(Request $request, Document $document): JsonResponse
+    {
+        if ($response = $this->guardRoomAccess($request, $document->room_id)) {
+            return $response;
+        }
+
+        $limit = (int) $request->get('limit', 25);
+        $history = $document->statusHistories()
+            ->with('user:id,name')
+            ->limit(max(1, min(100, $limit)))
+            ->get();
+
+        return response()->json($history);
+    }
+
     private function validateDocument(Request $request, ?Document $document = null): array
     {
         $cabinetId = $request->get('cabinet_id', $document?->cabinet_id);
@@ -184,9 +216,14 @@ class DocumentController extends Controller
             'cabinet_id' => [$document ? 'sometimes' : 'required', 'exists:cabinets,id'],
             'shelf_id' => ['nullable', 'exists:shelves,id'],
             'metadata' => ['nullable', 'array'],
+            'pdf' => ['nullable', 'file', 'mimetypes:application/pdf'],
         ];
 
-        return $request->validate($rules);
+        $data = $request->validate($rules);
+
+        unset($data['pdf']);
+
+        return $data;
     }
 
     private function enforceShelfOwnership(array &$data, Cabinet $cabinet): void
@@ -227,5 +264,54 @@ class DocumentController extends Controller
     {
         $perPage = (int) $request->get('per_page', 10);
         return max(1, min(50, $perPage));
+    }
+
+    private function handlePdfUpload(Request $request, ?Document $document = null): array
+    {
+        if (!$request->hasFile('pdf')) {
+            return [];
+        }
+
+        $disk = config('filesystems.default', 'local');
+        $file = $request->file('pdf');
+
+        $path = $file->store('documents', $disk);
+
+        if ($document) {
+            $this->deleteDocumentFile($document);
+        }
+
+        return [
+            'file_path' => $path,
+            'file_disk' => $disk,
+            'file_original_name' => $file->getClientOriginalName(),
+            'file_mime_type' => $file->getClientMimeType(),
+            'file_size' => $file->getSize(),
+        ];
+    }
+
+    private function deleteDocumentFile(?Document $document): void
+    {
+        if (!$document || !$document->file_path) {
+            return;
+        }
+
+        $disk = $document->file_disk ?: config('filesystems.default', 'local');
+
+        Storage::disk($disk)->delete($document->file_path);
+    }
+
+    private function recordStatusHistory(Document $document, string $status, ?int $userId = null, ?string $note = null): void
+    {
+        if (!in_array($status, self::STATUSES, true)) {
+            return;
+        }
+
+        DocumentStatusHistory::create([
+            'document_id' => $document->id,
+            'user_id' => $userId,
+            'status' => $status,
+            'note' => $note,
+        ]);
     }
 }
