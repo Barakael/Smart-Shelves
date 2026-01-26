@@ -20,9 +20,21 @@ export interface DocumentRecord {
   row_index?: number | null;
   column_index?: number | null;
   metadata?: Record<string, unknown> | null;
+  file_url?: string | null;
+  file_original_name?: string | null;
+  has_file?: boolean;
   created_at?: string;
   updated_at?: string;
   cabinet?: MinimalRelation | null;
   shelfMeta?: MinimalRelation | null;
   room?: MinimalRelation | null;
+}
+
+export interface DocumentStatusHistoryEntry {
+  id: number;
+  status: DocumentStatus;
+  note?: string | null;
+  created_at: string;
+  updated_at?: string;
+  user?: MinimalRelation | null;
 }
