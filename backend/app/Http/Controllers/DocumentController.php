@@ -310,7 +310,7 @@ class DocumentController extends Controller
 
     private function perPage(Request $request): int
     {
-        $perPage = (int) $request->get('per_page', 10);
+        $perPage = (int) $request->get('per_page', 20);
         return max(1, min(50, $perPage));
     }
 

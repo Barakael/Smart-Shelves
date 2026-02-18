@@ -34,6 +34,14 @@ class ActionLogController extends Controller
             $query->where('panel_id', $request->panel_id);
         }
 
+        if ($request->filled('cabinet_id')) {
+            $query->where('cabinet_id', $request->cabinet_id);
+        }
+
+        if ($request->filled('shelf_id')) {
+            $query->where('shelf_id', $request->shelf_id);
+        }
+
         // Filter by action type
         if ($request->has('action_type')) {
             $query->where('action_type', $request->action_type);
@@ -47,8 +55,9 @@ class ActionLogController extends Controller
             $query->whereDate('created_at', '<=', $request->to_date);
         }
 
-        $perPage = $request->get('per_page', 50);
-        $logs = $query->paginate($perPage);
+        $perPage = max(1, min(100, (int) $request->get('per_page', 20)));
+        $page = max(1, (int) $request->get('page', 1));
+        $logs = $query->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json($logs);
     }
