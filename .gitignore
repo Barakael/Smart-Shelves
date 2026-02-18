@@ -33,3 +33,4 @@ yarn-error.log*
 backend/storage/
 backend/bootstrap/cache/
 
+backend/database/database.sqlite
