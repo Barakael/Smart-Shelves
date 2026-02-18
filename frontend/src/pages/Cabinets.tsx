@@ -6,12 +6,9 @@ import { Cabinet, Shelf, Room } from '../types/cabinet';
 import { getApiUrl } from '../config/environment';
 
 const API_URL = getApiUrl();
-const MACRO_STORAGE_KEY = 'cabinet_macro_commands';
 const GAP_DISTANCE = 60;
 
 type MacroType = 'close' | 'lock' | 'vent';
-
-type MacroStore = Record<number, Partial<Record<MacroType, string>>>;
 
 const MACRO_LABELS: Record<MacroType, { label: string; placeholder: string }> = {
   close: { label: 'Close', placeholder: '68 04 09 00 00 00' },
@@ -36,33 +33,11 @@ const Cabinets: React.FC = () => {
   const [macroSending, setMacroSending] = useState<MacroType | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);
   const [selectedCabinetId, setSelectedCabinetId] = useState<number | null>(null);
-  const [macroCommands, setMacroCommands] = useState<MacroStore>({});
 
   useEffect(() => {
     fetchCabinets();
     fetchRooms();
   }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const cached = window.localStorage.getItem(MACRO_STORAGE_KEY);
-      if (cached) {
-        setMacroCommands(JSON.parse(cached));
-      }
-    } catch (storageError) {
-      console.warn('Unable to load macro commands from storage', storageError);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(MACRO_STORAGE_KEY, JSON.stringify(macroCommands));
-    } catch (storageError) {
-      console.warn('Unable to persist macro commands', storageError);
-    }
-  }, [macroCommands]);
 
   useEffect(() => {
     if (!selectedRoomId && rooms.length > 0) {
@@ -147,61 +122,15 @@ const Cabinets: React.FC = () => {
     }
   };
 
-  const sanitizeHexCommand = (value: string) =>
-    value
-      .replace(/[^0-9a-fA-F\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .toUpperCase();
-
-  const persistMacroCommand = (cabinetId: number, type: MacroType, command: string) => {
-    setMacroCommands(prev => ({
-      ...prev,
-      [cabinetId]: {
-        ...(prev[cabinetId] || {}),
-        [type]: command,
-      },
-    }));
-  };
-
-  const resolveMacroCommand = (cabinetId: number, type: MacroType) => {
-    const configured = getConfiguredMacro(cabinetId, type);
-    if (configured) {
-      return configured;
-    }
-
-    const cached = macroCommands[cabinetId]?.[type];
-    if (cached) {
-      return cached;
-    }
-
-    if (typeof window === 'undefined') {
-      return null;
-    }
-
-    const userInput = window.prompt(`Enter hex command for ${MACRO_LABELS[type].label}`, MACRO_LABELS[type].placeholder);
-    if (!userInput) {
-      return null;
-    }
-
-    const sanitized = sanitizeHexCommand(userInput);
-    if (!sanitized) {
-      setError('Hex command cannot be empty.');
-      return null;
-    }
-
-    persistMacroCommand(cabinetId, type, sanitized);
-    return sanitized;
-  };
-
   const handleMacroButtonClick = async (type: MacroType) => {
     if (!selectedCabinet) {
       setError('Select a cabinet to send commands.');
       return;
     }
 
-    const macro = resolveMacroCommand(selectedCabinet.id, type);
+    const macro = getConfiguredMacro(selectedCabinet.id, type);
     if (!macro) {
+      setError(`No ${MACRO_LABELS[type].label} command configured. Update it in Settings → Configurations.`);
       return;
     }
 
@@ -233,6 +162,17 @@ const Cabinets: React.FC = () => {
     if (!selectedCabinetId) return null;
     return cabinets.find(cab => cab.id === selectedCabinetId) || null;
   }, [cabinets, selectedCabinetId]);
+
+  const macroAvailability = useMemo<Record<MacroType, boolean>>(() => {
+    if (!selectedCabinet) {
+      return { close: false, lock: false, vent: false };
+    }
+    return {
+      close: Boolean(selectedCabinet.macro_close_command?.trim()),
+      lock: Boolean(selectedCabinet.macro_lock_command?.trim()),
+      vent: Boolean(selectedCabinet.macro_vent_command?.trim()),
+    };
+  }, [selectedCabinet]);
 
   const openShelf = useMemo(() => {
     return selectedCabinet?.shelves?.find(shelf => shelf.is_open) || null;
@@ -413,7 +353,7 @@ const Cabinets: React.FC = () => {
                             key={type}
                             className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${MACRO_STYLES[type]}`}
                             onClick={() => handleMacroButtonClick(type)}
-                            disabled={!selectedCabinet || macroSending === type}
+                            disabled={!selectedCabinet || macroSending === type || !macroAvailability[type]}
                           >
                             <span className="flex items-center gap-1">
                               {type === 'close' && <XCircle className="w-3.5 h-3.5" />}
@@ -424,6 +364,11 @@ const Cabinets: React.FC = () => {
                           </button>
                         ))}
                       </div>
+                      {selectedCabinet && (!macroAvailability.close || !macroAvailability.lock || !macroAvailability.vent) && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                      
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
