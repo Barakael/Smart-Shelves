@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Filter } from 'lucide-react';
 import axios from 'axios';
 import { getApiUrl } from '../config/environment';
+import { FiltersResponse } from '../types/documentsPage';
 
 const API_URL = getApiUrl();
+const ITEMS_PER_PAGE = 10;
 
 interface ActionLog {
   id: number;
@@ -35,42 +37,113 @@ interface ActionLog {
   };
 }
 
+interface PaginatedMeta {
+  total: number;
+  lastPage: number;
+  from: number;
+  to: number;
+}
+
+type HistoryFilters = {
+  from_date: string;
+  to_date: string;
+  cabinet_id: string;
+  shelf_id: string;
+};
+
 const History = () => {
   const [logs, setLogs] = useState<ActionLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<HistoryFilters>({
     from_date: '',
     to_date: '',
+    cabinet_id: '',
+    shelf_id: '',
   });
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedCabinet, setSelectedCabinet] = useState('');
-  const [selectedShelf, setSelectedShelf] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
+  const [filterOptions, setFilterOptions] = useState<FiltersResponse>({
+    rooms: [],
+    cabinets: [],
+    statuses: [],
+  });
+  const [pageMeta, setPageMeta] = useState<PaginatedMeta>({
+    total: 0,
+    lastPage: 1,
+    from: 0,
+    to: 0,
+  });
 
-  useEffect(() => {
-    fetchLogs();
-  }, [filters]);
-
-  useEffect(() => {
+  const handleFilterChange = useCallback((updates: Partial<HistoryFilters>) => {
+    setFilters(prev => ({ ...prev, ...updates }));
     setCurrentPage(1);
-  }, [selectedCabinet, selectedShelf, filters.from_date, filters.to_date, logs.length]);
+  }, []);
 
-  const fetchLogs = async () => {
+  const fetchFilterOptions = useCallback(async () => {
+    try {
+      const { data } = await axios.get<FiltersResponse>(`${API_URL}/documents/filters`);
+      setFilterOptions({
+        rooms: data.rooms ?? [],
+        cabinets: data.cabinets ?? [],
+        statuses: data.statuses ?? [],
+      });
+    } catch (error) {
+      console.error('Failed to load filter metadata:', error);
+    }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
+      const params: Record<string, string> = {
+        page: String(currentPage),
+        per_page: String(ITEMS_PER_PAGE),
+      };
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value) {
+          params[key] = value;
+        }
       });
-      const response = await axios.get(`${API_URL}/action-logs?${params.toString()}`);
-      setLogs(response.data.data || response.data);
+
+      const { data } = await axios.get(`${API_URL}/action-logs`, { params });
+      const resultData = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+      const resolvedLastPage = data?.last_page ?? 1;
+      if (resolvedLastPage >= 1 && currentPage > resolvedLastPage) {
+        setCurrentPage(resolvedLastPage);
+        return;
+      }
+
+      const from = data?.from ?? (resultData.length ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0);
+      const to = data?.to ?? (resultData.length ? (currentPage - 1) * ITEMS_PER_PAGE + resultData.length : 0);
+
+      setLogs(resultData);
+      setPageMeta({
+        total: data?.total ?? resultData.length,
+        lastPage: resolvedLastPage,
+        from,
+        to,
+      });
     } catch (error) {
       console.error('Failed to fetch logs:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters, currentPage]);
+
+  useEffect(() => {
+    fetchFilterOptions();
+  }, [fetchFilterOptions]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const cabinetOptions = filterOptions.cabinets;
+  const shelfOptions = useMemo(() => {
+    if (!filters.cabinet_id) return [];
+    const cabinet = cabinetOptions.find(option => String(option.id) === filters.cabinet_id);
+    return cabinet?.shelves ?? [];
+  }, [cabinetOptions, filters.cabinet_id]);
 
   const getActionColor = (actionType: string) => {
     const normalized = actionType.toLowerCase();
@@ -107,75 +180,12 @@ const History = () => {
     return '';
   };
 
-  const uniqueCabinetOptions = useMemo(() => {
-    const names = logs
-      .map(log => getCabinetDisplayName(log))
-      .filter(name => Boolean(name));
-    return Array.from(new Set(names));
-  }, [logs]);
-
-  const getShelfKey = (log: ActionLog) => {
-    if (log.shelf?.id) {
-      return String(log.shelf.id);
-    }
-    if (log.shelf?.name) {
-      return `${log.shelf.name}-${log.panel?.id ?? log.cabinet?.id ?? ''}`;
-    }
-    return '';
-  };
-
-  const uniqueShelfOptions = useMemo(() => {
-    const options = new Map<string, { value: string; label: string }>();
-    logs
-      .filter(log => {
-        if (!selectedCabinet) return true;
-        return getCabinetDisplayName(log) === selectedCabinet;
-      })
-      .forEach(log => {
-        const key = getShelfKey(log);
-        if (!key) return;
-        if (!options.has(key)) {
-          const shelfName = log.shelf?.name || 'Shelf';
-          const cabinetName = getCabinetDisplayName(log);
-          options.set(key, {
-            value: key,
-            label: cabinetName ? `${shelfName} (${cabinetName})` : shelfName,
-          });
-        }
-      });
-    return Array.from(options.values());
-  }, [logs, selectedCabinet]);
-
-  useEffect(() => {
-    if (selectedShelf && !uniqueShelfOptions.some(option => option.value === selectedShelf)) {
-      setSelectedShelf('');
-    }
-  }, [selectedShelf, uniqueShelfOptions]);
-
-  const filteredLogs = useMemo(() => {
-    return logs.filter(log => {
-      if (selectedCabinet && getCabinetDisplayName(log) !== selectedCabinet) {
-        return false;
-      }
-      if (selectedShelf && getShelfKey(log) !== selectedShelf) {
-        return false;
-      }
-      return true;
-    });
-  }, [logs, selectedCabinet, selectedShelf]);
-
-  const totalPages = filteredLogs.length ? Math.ceil(filteredLogs.length / ITEMS_PER_PAGE) : 1;
-  const paginatedLogs = filteredLogs.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  );
-
   const handlePageChange = (direction: 'prev' | 'next') => {
     setCurrentPage(prev => {
       if (direction === 'prev') {
         return Math.max(1, prev - 1);
       }
-      return Math.min(totalPages, prev + 1);
+      return Math.min(pageMeta.lastPage, prev + 1);
     });
   };
 
@@ -219,14 +229,14 @@ const History = () => {
                 Cabinet (Area)
               </label>
               <select
-                value={selectedCabinet}
-                onChange={(e) => setSelectedCabinet(e.target.value)}
+                value={filters.cabinet_id}
+                onChange={(e) => handleFilterChange({ cabinet_id: e.target.value, shelf_id: '' })}
                 className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
               >
                 <option value="">All Cabinets</option>
-                {uniqueCabinetOptions.map(name => (
-                  <option key={name} value={name}>
-                    {name}
+                {cabinetOptions.map(cabinet => (
+                  <option key={cabinet.id} value={String(cabinet.id)}>
+                    {cabinet.name}
                   </option>
                 ))}
               </select>
@@ -236,14 +246,15 @@ const History = () => {
                 Shelf
               </label>
               <select
-                value={selectedShelf}
-                onChange={(e) => setSelectedShelf(e.target.value)}
+                value={filters.shelf_id}
+                onChange={(e) => handleFilterChange({ shelf_id: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
+                disabled={!filters.cabinet_id || shelfOptions.length === 0}
               >
                 <option value="">All Shelves</option>
-                {uniqueShelfOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
+                {shelfOptions.map(option => (
+                  <option key={option.id} value={String(option.id)}>
+                    {option.name}
                   </option>
                 ))}
               </select>
@@ -255,7 +266,7 @@ const History = () => {
               <input
                 type="date"
                 value={filters.from_date}
-                onChange={(e) => setFilters({ ...filters, from_date: e.target.value })}
+                onChange={(e) => handleFilterChange({ from_date: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
               />
             </div>
@@ -266,7 +277,7 @@ const History = () => {
               <input
                 type="date"
                 value={filters.to_date}
-                onChange={(e) => setFilters({ ...filters, to_date: e.target.value })}
+                onChange={(e) => handleFilterChange({ to_date: e.target.value })}
                 className="w-full px-4 py-2 rounded-lg border border-primary-300 dark:border-primary-800 bg-white dark:bg-primary-900/50 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-800"
               />
             </div>
@@ -308,7 +319,7 @@ const History = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {paginatedLogs.length === 0 ? (
+                  {logs.length === 0 ? (
                     <tr>
                       <td
                         className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400"
@@ -318,7 +329,7 @@ const History = () => {
                       </td>
                     </tr>
                   ) : (
-                    paginatedLogs.map(log => (
+                    logs.map(log => (
                       <tr key={log.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/40 transition">
                         <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                           {formatDate(log.created_at)}
@@ -345,7 +356,7 @@ const History = () => {
             </div>
             <div className="flex flex-col md:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-100 dark:border-gray-800">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Showing {paginatedLogs.length} of {filteredLogs.length} records
+                Showing {logs.length ? `${pageMeta.from || 0}-${pageMeta.to || logs.length}` : 0} of {pageMeta.total} records
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -356,11 +367,11 @@ const History = () => {
                   Previous
                 </button>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                  Page {currentPage} of {totalPages}
+                  Page {currentPage} of {pageMeta.lastPage}
                 </span>
                 <button
                   onClick={() => handlePageChange('next')}
-                  disabled={currentPage === totalPages || paginatedLogs.length === 0}
+                  disabled={currentPage === pageMeta.lastPage || logs.length === 0}
                   className="px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed border-primary-300 dark:border-primary-700 text-primary-800 dark:text-primary-200 hover:bg-primary-50 dark:hover:bg-primary-900/40"
                 >
                   Next

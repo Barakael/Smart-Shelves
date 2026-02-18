@@ -14,7 +14,7 @@ import templateUrl from '../resources/images/eShelfTemplate.csv?url';
 
 const API_URL = getApiUrl();
 const BULK_API_URL = getBulkServiceUrl();
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 20;
 const STATUS_HISTORY_LIMIT = 3;
 const DOCUMENTS_LOAD_ERROR = 'Unable to load documents. Please try again.';
 
