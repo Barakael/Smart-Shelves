@@ -1,4 +1,4 @@
-import { Wifi, History, Users, Settings, FileText } from 'lucide-react';
+import { Wifi, History, Users, Settings, FileText, CreditCard, LayoutDashboard } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,10 +6,12 @@ const Sidebar = () => {
   const { user } = useAuth();
 
   const menuItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     ...(user?.role === 'admin' ? [{ icon: Wifi, label: 'Cabinets', path: '/cabinets' }] : []),
     { icon: FileText, label: 'Documents', path: '/documents' },
     { icon: History, label: 'History', path: '/history' },
     ...(user?.role === 'admin' ? [{ icon: Users, label: 'Users', path: '/users' }] : []),
+    ...(user?.role === 'admin' ? [{ icon: CreditCard, label: 'Payment Management', path: '/payment-management' }] : []),
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
