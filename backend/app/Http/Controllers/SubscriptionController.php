@@ -246,4 +246,102 @@ class SubscriptionController extends Controller
             ],
         ], 200);
     }
+
+    /**
+     * Mark a room as paid and activate/renew subscription.
+     * Used by admins to manually unlock rooms after receiving payment.
+     *
+     * @param Room $room
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function markRoomAsPaid(Room $room, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'plan_id' => 'required|exists:subscription_plans,id',
+            'payment_reference' => 'nullable|string|max:255',
+        ]);
+
+        // Check if room already has an active subscription
+        $existingSubscription = $room->subscription;
+
+        if ($existingSubscription && $existingSubscription->isActive()) {
+            // Renew existing subscription
+            $subscription = $this->subscriptionService->renewSubscription($existingSubscription);
+            $message = 'Subscription renewed successfully';
+        } else {
+            // Activate new subscription
+            $subscription = $this->subscriptionService->activateSubscription($room, $validated['plan_id']);
+            $message = 'Payment processed and subscription activated';
+        }
+
+        // Log payment reference if provided (could be stored in a payments table in future)
+        \Log::info('Room payment marked', [
+            'room_id' => $room->id,
+            'room_name' => $room->name,
+            'plan_id' => $validated['plan_id'],
+            'payment_reference' => $validated['payment_reference'] ?? 'N/A',
+            'subscription_id' => $subscription->id,
+        ]);
+
+        return response()->json([
+            'message' => $message,
+            'subscription' => $this->subscriptionService->getSubscriptionDetails($subscription),
+        ], 200);
+    }
+
+    /**
+     * Get payment dashboard for all rooms (admin only).
+     * Returns all rooms with subscription status for payment tracking.
+     *
+     * @return JsonResponse
+     */
+    public function getPaymentDashboard(): JsonResponse
+    {
+        $rooms = Room::with('subscription.plan')
+            ->orderBy('name')
+            ->get();
+
+        $data = $rooms->map(function (Room $room) {
+            // Refresh subscription status cache
+            $this->subscriptionService->updateRoomSubscriptionStatus($room);
+            $room = $room->fresh(['subscription.plan']);
+
+            $subscription = $room->subscription;
+            
+            return [
+                'id' => $room->id,
+                'name' => $room->name,
+                'location' => $room->location,
+                'description' => $room->description,
+                'subscription_status' => $room->subscription_status,
+                'subscription' => $subscription ? [
+                    'id' => $subscription->id,
+                    'plan_id' => $subscription->plan_id,
+                    'plan_name' => $subscription->plan->name ?? 'Unknown',
+                    'plan_price' => $subscription->plan->price ?? 0,
+                    'status' => $subscription->status,
+                    'starts_at' => $subscription->starts_at,
+                    'ends_at' => $subscription->ends_at,
+                    'renewed_at' => $subscription->renewed_at,
+                    'days_until_expiration' => $subscription->daysUntilExpiration(),
+                    'is_active' => $subscription->isActive(),
+                    'is_expired' => $subscription->isExpired(),
+                    'is_in_grace_period' => $subscription->isInGracePeriod(),
+                    'grace_period_days_left' => $subscription->daysRemainingInGracePeriod(),
+                    'should_auto_renew' => $subscription->shouldAutoRenew(),
+                ] : null,
+                'user_count' => $room->users()->count(),
+            ];
+        });
+
+        return response()->json([
+            'rooms' => $data,
+            'total_rooms' => $rooms->count(),
+            'active_subscriptions' => $data->where('subscription_status', 'active')->count(),
+            'grace_period_count' => $data->where('subscription_status', 'grace_period')->count(),
+            'expired_count' => $data->where('subscription_status', 'expired')->count(),
+            'no_subscription_count' => $data->where('subscription_status', 'no_subscription')->count(),
+        ], 200);
+    }
 }
