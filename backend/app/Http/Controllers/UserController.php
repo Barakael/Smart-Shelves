@@ -36,15 +36,26 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'role' => ['required', Rule::in(['admin', 'operator'])],
+            'role' => ['nullable', Rule::in(['admin', 'operator'])],
             'room_id' => 'nullable|exists:rooms,id',
         ]);
+
+        // Default to operator role if not specified
+        $role = $validated['role'] ?? 'operator';
+
+        // Security: Prevent creating multiple admin accounts
+        // Only admin@smartshelves.com should be admin
+        if ($role === 'admin' && $validated['email'] !== 'admin@smartshelves.com') {
+            return response()->json([
+                'message' => 'Only admin@smartshelves.com can have admin role. New users must be operators.'
+            ], 403);
+        }
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role'],
+            'role' => $role,
             'room_id' => $validated['room_id'] ?? null,
         ]);
 
