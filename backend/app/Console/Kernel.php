@@ -13,7 +13,11 @@ class Kernel extends ConsoleKernel
 
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        // Process subscriptions that have expired past grace period - run daily at 2 AM
+        $schedule->command('subscriptions:process-expired')->dailyAt('02:00');
+
+        // Auto-renew subscriptions due for renewal - run daily at 3 AM
+        $schedule->command('subscriptions:auto-renew')->dailyAt('03:00');
     }
 
     protected function commands(): void
