@@ -3,13 +3,16 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, Mail, Lock } from 'lucide-react';
+import RoomSelectorModal from '../components/RoomSelectorModal';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const [showRoomSelector, setShowRoomSelector] = useState(false);
+  const [accessibleRooms, setAccessibleRooms] = useState<any[]>([]);
+  const { login, loadAccessibleRooms, setCurrentRoom } = useAuth();
   const navigate = useNavigate();
   const isLogin = true;
 
@@ -21,15 +24,38 @@ const Login = () => {
     try {
       if (isLogin) {
         await login(email, password);
-        navigate('/cabinets');
+        
+        // Load accessible rooms
+        const rooms = await loadAccessibleRooms();
+        
+        // Check if user is admin (admins can choose any room, operators are locked to their primary room)
+        if (email === 'admin@smartshelves.com') {
+          // Show room selector for admin (admin can choose any room)
+          setAccessibleRooms(rooms);
+          setShowRoomSelector(true);
+          setIsLoading(false);
+        } else {
+          // Operators navigate directly (already locked to their primary room)
+          navigate('/dashboard');
+        }
       } else {
         // Sign up logic would go here
         setError('Sign up functionality coming soon');
+        setIsLoading(false);
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed. Please try again.');
-    } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRoomSelected = async (roomId: number) => {
+    try {
+      await setCurrentRoom(roomId);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Failed to set current room:', error);
+      setError('Failed to select room. Please try again.');
     }
   };
 
@@ -198,6 +224,13 @@ const Login = () => {
             </motion.div>
         </div>
       </motion.div>
+
+      {/* Room Selector Modal for Admin */}
+      <RoomSelectorModal
+        rooms={accessibleRooms}
+        onSelectRoom={handleRoomSelected}
+        isOpen={showRoomSelector}
+      />
     </div>
   );
 };
