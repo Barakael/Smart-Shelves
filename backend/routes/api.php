@@ -8,6 +8,7 @@ use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\ActionLogController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -16,6 +17,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Subscription status endpoints for users (not admin-only)
+    Route::get('/user/accessible-rooms', [AuthController::class, 'getAccessibleRooms']);
+    Route::get('/rooms/{room}/subscription-status', [AuthController::class, 'getSubscriptionStatus']);
+    Route::get('/subscription/my-status', [SubscriptionController::class, 'getMySubscriptionStatus']);
 
     Route::apiResource('shelves', ShelfController::class);
     Route::apiResource('rooms', RoomController::class);
@@ -59,5 +65,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/documents/{document}/status-history', [DocumentController::class, 'statusHistory']);
     Route::get('/documents/{document}/file', [DocumentController::class, 'download']);
     Route::apiResource('documents', DocumentController::class)->except(['create', 'edit']);
+
+    // Subscriptions (admin only)
+    Route::post('/admin/rooms/{id}/subscriptions', [SubscriptionController::class, 'activateSubscription'])->middleware('admin');
+    Route::get('/admin/rooms/{id}/subscription', [SubscriptionController::class, 'getSubscription'])->middleware('admin');
+    Route::put('/admin/rooms/{id}/subscription/renew', [SubscriptionController::class, 'renewSubscription'])->middleware('admin');
+    Route::delete('/admin/rooms/{id}/subscription', [SubscriptionController::class, 'cancelSubscription'])->middleware('admin');
+    Route::get('/admin/subscriptions/overview', [SubscriptionController::class, 'getOverview'])->middleware('admin');
+    Route::get('/admin/subscriptions/expiring-soon', [SubscriptionController::class, 'getExpiringsSoon'])->middleware('admin');
+    Route::get('/admin/subscriptions/plans', [SubscriptionController::class, 'getAvailablePlans'])->middleware('admin');
 });
 
