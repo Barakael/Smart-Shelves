@@ -12,7 +12,8 @@ class CabinetPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->isAdmin();
+        // Admins can view all cabinets; operators can view cabinets for their assigned room
+        return true;
     }
 
     /**
@@ -20,7 +21,8 @@ class CabinetPolicy
      */
     public function view(User $user, Cabinet $cabinet): bool
     {
-        return $user->isAdmin() || $user->rooms->contains($cabinet->room_id);
+        // Admins can view any cabinet; operators can only view cabinets in their assigned room
+        return $user->isAdmin() || $user->room_id === $cabinet->room_id;
     }
 
     /**

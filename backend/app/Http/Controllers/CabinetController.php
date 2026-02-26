@@ -19,15 +19,25 @@ use Exception;
 class CabinetController extends Controller
 {
     /**
-     * Get all cabinets (admin only).
+     * Get cabinets, filtered by room for operators.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Cabinet::class);
 
-        $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
-            ->orderBy('name')
-            ->get();
+        $user = $request->user();
+
+        if ($user->isAdmin()) {
+            $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
+                ->orderBy('name')
+                ->get();
+        } else {
+            // Operators only see cabinets in their assigned room
+            $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
+                ->where('room_id', $user->room_id)
+                ->orderBy('name')
+                ->get();
+        }
 
         return response()->json($cabinets);
     }
