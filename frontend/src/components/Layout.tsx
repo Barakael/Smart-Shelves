@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import SubscriptionWarningBanner from './SubscriptionWarningBanner';
 
 const Layout = () => {
   return (
@@ -10,6 +11,7 @@ const Layout = () => {
         <Sidebar />
         <div className="flex flex-col flex-1 overflow-hidden">
           <Navbar />
+          <SubscriptionWarningBanner />
           <motion.main
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
