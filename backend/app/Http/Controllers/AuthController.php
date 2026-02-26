@@ -71,7 +71,7 @@ class AuthController extends Controller
                     'status' => $currentRoom->subscription->status,
                     'plan_name' => $currentRoom->subscription->plan->name ?? 'Unknown',
                     'ends_at' => $currentRoom->subscription->ends_at,
-                    'days_remaining' => $currentRoom->subscription->daysUntilExpiration(),
+                    'days_remaining' => $currentRoom->subscription->daysRemaining(),
                 ] : null,
             ] : null,
         ]);
@@ -102,7 +102,6 @@ class AuthController extends Controller
             return [
                 'id' => $room->id,
                 'name' => $room->name,
-                'location' => $room->location,
                 'description' => $room->description,
                 'subscription_status' => $room->subscription_status,
                 'subscription' => $room->subscription ? [
@@ -113,9 +112,8 @@ class AuthController extends Controller
                     'plan_price' => $room->subscription->plan->price ?? 0,
                     'starts_at' => $room->subscription->starts_at,
                     'ends_at' => $room->subscription->ends_at,
-                    'days_remaining' => $room->subscription->daysUntilExpiration(),
+                    'days_remaining' => $room->subscription->daysRemaining(),
                     'is_in_grace_period' => $room->subscription->isInGracePeriod(),
-                    'grace_period_days_left' => $room->subscription->daysRemainingInGracePeriod(),
                 ] : null,
             ];
         });
@@ -157,14 +155,12 @@ class AuthController extends Controller
                 'plan_period_days' => $room->subscription->plan->period_days ?? 365,
                 'starts_at' => $room->subscription->starts_at,
                 'ends_at' => $room->subscription->ends_at,
-                'renewed_at' => $room->subscription->renewed_at,
-                'renewal_due_at' => $room->subscription->renewal_due_at,
-                'days_remaining' => $room->subscription->daysUntilExpiration(),
+                'grace_ends_at' => $room->subscription->grace_ends_at,
+                'days_remaining' => $room->subscription->daysRemaining(),
                 'is_active' => $room->subscription->isActive(),
                 'is_expired' => $room->subscription->isExpired(),
                 'is_in_grace_period' => $room->subscription->isInGracePeriod(),
-                'grace_period_days_left' => $room->subscription->daysRemainingInGracePeriod(),
-                'should_auto_renew' => $room->subscription->shouldAutoRenew(),
+                'auto_renew' => $room->subscription->auto_renew,
             ] : [
                 'status' => 'no_subscription',
                 'message' => 'This room has no active subscription',
