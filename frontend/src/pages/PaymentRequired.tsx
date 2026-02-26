@@ -23,6 +23,20 @@ const PaymentRequired = () => {
       return;
     }
 
+    // Try to load subscription details from session storage first
+    const paymentData = sessionStorage.getItem('payment_required_data');
+    if (paymentData) {
+      try {
+        const parsed = JSON.parse(paymentData);
+        if (parsed.message) {
+          setError(parsed.message);
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+      sessionStorage.removeItem('payment_required_data');
+    }
+
     fetchSubscriptionStatus();
   }, [user, navigate]);
 
@@ -35,9 +49,14 @@ const PaymentRequired = () => {
       if (data.status === 'active' || data.status === 'grace_period') {
         navigate('/dashboard');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch subscription status:', err);
-      setError('Unable to check subscription status');
+      // For 401, the user's session expired, so logout
+      if (err.response?.status === 401) {
+        logout();
+        return;
+      }
+      setError('Unable to check subscription status. Please try again.');
     }
   };
 

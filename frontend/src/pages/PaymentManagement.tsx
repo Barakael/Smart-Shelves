@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Check, X, Plus, Building } from 'lucide-react';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 import { getApiUrl } from '../config/environment';
 import { Payment, RoomWithSubscription, Plan } from '../types/subscription';
 
 const API_URL = getApiUrl();
 
 const PaymentManagement = () => {
+  const { user, currentRoom, isLoading: isAuthLoading } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  
   const [payments, setPayments] = useState<Payment[]>([]);
   const [rooms, setRooms] = useState<RoomWithSubscription[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -27,23 +31,34 @@ const PaymentManagement = () => {
   });
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    // Wait for user data to load before fetching
+    if (user) {
+      fetchData();
+    }
+  }, [user, isAdmin]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [paymentsRes, roomsRes] = await Promise.all([
-        axios.get(`${API_URL}/payments`),
-        axios.get(`${API_URL}/user/accessible-rooms`),
-      ]);
+      if (isAdmin === true) {
+        const [paymentsRes, roomsRes] = await Promise.all([
+          axios.get(`${API_URL}/payments`),
+          axios.get(`${API_URL}/user/accessible-rooms`),
+        ]);
 
-      setPayments(paymentsRes.data.data || paymentsRes.data);
-      setRooms(roomsRes.data.rooms || roomsRes.data);
+        setPayments(paymentsRes.data.data || paymentsRes.data);
+        setRooms(roomsRes.data.rooms || roomsRes.data);
+      } else {
+        // Operators only need to see their own subscription
+        const roomsRes = await axios.get(`${API_URL}/user/accessible-rooms`);
+        setRooms(roomsRes.data.rooms || roomsRes.data);
+        setPayments([]);
+      }
 
       // Create a default plan if none exists (for demo)
       setPlans([{ id: 1, name: 'Annual License', description: '', price: 99, period_days: 365, is_active: true }]);
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Failed to fetch data:', err);
       console.error('Failed to fetch data:', err);
       setError('Failed to load payment data');
     } finally {
@@ -138,6 +153,18 @@ const PaymentManagement = () => {
     }
   }, [success]);
 
+  // Show loading state while auth data is being fetched
+  if (isAuthLoading || !user) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#012169]/20 border-t-[#012169] mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -146,6 +173,108 @@ const PaymentManagement = () => {
     );
   }
 
+  // Operator view - show their subscription status
+  if (isAdmin === false) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Your Subscription</h1>
+          <p className="text-gray-600 dark:text-gray-400">View and manage your subscription status</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-800 dark:text-red-200">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-green-800 dark:text-green-200">
+            {success}
+          </div>
+        )}
+
+        {/* Current Room Subscription */}
+        {currentRoom && (
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 p-8">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-6 flex items-center gap-2">
+              <Building className="w-6 h-6" />
+              {currentRoom.name} - Subscription Status
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Current Status</p>
+                <span className={`inline-block px-4 py-2 rounded-lg text-lg font-semibold ${getSubscriptionStatusBadge(currentRoom.subscription_status)}`}>
+                  {currentRoom.subscription_status === 'no_subscription' ? 'No Subscription' : currentRoom.subscription_status}
+                </span>
+              </div>
+
+              {currentRoom.subscription && (
+                <>
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Expires On</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {new Date(currentRoom.subscription.ends_at).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Days Remaining</p>
+                    <p className={`text-2xl font-semibold ${
+                      currentRoom.subscription.days_remaining > 30 ? 'text-green-600 dark:text-green-400' :
+                      currentRoom.subscription.days_remaining > 0 ? 'text-orange-600 dark:text-orange-400' :
+                      'text-red-600 dark:text-red-400'
+                    }`}>
+                      {Math.max(0, currentRoom.subscription.days_remaining)} days
+                    </p>
+                  </div>
+
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Plan</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      {currentRoom.subscription.plan_name}
+                    </p>
+                  </div>
+
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-6">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Plan Cost</p>
+                    <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                      ${currentRoom.subscription.plan_price}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {currentRoom.subscription_status === 'expired' || currentRoom.subscription_status === 'no_subscription' ? (
+              <div className="mt-6 p-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-red-800 dark:text-red-200 font-semibold mb-2">Subscription Expired</p>
+                <p className="text-red-700 dark:text-red-300 mb-4">
+                  Your subscription has expired. Please contact your administrator to renew your subscription.
+                </p>
+                <a href="mailto:admin@smartshelves.com" className="text-red-600 dark:text-red-400 hover:underline font-medium">
+                  admin@smartshelves.com
+                </a>
+              </div>
+            ) : currentRoom.subscription_status === 'grace_period' ? (
+              <div className="mt-6 p-6 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg">
+                <p className="text-orange-800 dark:text-orange-200 font-semibold mb-2">Grace Period Active</p>
+                <p className="text-orange-700 dark:text-orange-300 mb-4">
+                  Your subscription is in a grace period. Please contact your administrator to renew your subscription before it fully expires.
+                </p>
+                <a href="mailto:admin@smartshelves.com" className="text-orange-600 dark:text-orange-400 hover:underline font-medium">
+                  admin@smartshelves.com
+                </a>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Admin view - show payment management
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
