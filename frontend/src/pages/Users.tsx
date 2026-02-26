@@ -413,8 +413,10 @@ const Users = () => {
                       required
                     >
                       <option value="operator">Operator</option>
-                      <option value="admin">Admin</option>
                     </select>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Admin accounts are managed separately by system administrators
+                    </p>
                   </div>
 
                   {formData.role === 'operator' && (
