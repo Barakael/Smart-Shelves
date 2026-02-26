@@ -4,7 +4,7 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Download, Filter, FileArchive, Paperclip, PlusCircle, RefreshCw, Search, Trash2, UploadCloud, X } from 'lucide-react';
 import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../types/documents';
-import { CabinetOption, DocumentPageMeta, DocumentQueryState, FiltersResponse } from '../types/documentsPage';
+import { DocumentPageMeta, DocumentQueryState, FiltersResponse } from '../types/documentsPage';
 import DocumentFiltersPanel from '../components/documents/DocumentFiltersPanel';
 import DocumentTable from '../components/documents/DocumentTable';
 import DocumentDetailModal from '../components/documents/DocumentDetailModal';
