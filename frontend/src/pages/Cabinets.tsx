@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Wind, XCircle } from 'lucide-react';
 import axios from 'axios';
+import { useAuth } from '../contexts/AuthContext';
 import { Cabinet, Shelf, Room } from '../types/cabinet';
 import { getApiUrl } from '../config/environment';
 
@@ -23,6 +24,10 @@ const MACRO_STYLES: Record<MacroType, string> = {
 };
 
 const Cabinets: React.FC = () => {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const operatorRoomId = user?.room_id;
+  
   const [cabinets, setCabinets] = useState<Cabinet[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,15 +40,23 @@ const Cabinets: React.FC = () => {
   const [selectedCabinetId, setSelectedCabinetId] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchCabinets();
-    fetchRooms();
-  }, []);
+    // Wait for user data to load before fetching
+    if (user) {
+      fetchCabinets();
+      fetchRooms();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!selectedRoomId && rooms.length > 0) {
-      setSelectedRoomId(rooms[0].id);
+      // Operators are locked to their assigned room; admins use room selection
+      if (isAdmin === false && operatorRoomId) {
+        setSelectedRoomId(operatorRoomId);
+      } else if (rooms[0]) {
+        setSelectedRoomId(rooms[0].id);
+      }
     }
-  }, [rooms, selectedRoomId]);
+  }, [rooms, selectedRoomId, isAdmin, operatorRoomId]);
 
   useEffect(() => {
     if (!cabinets.length) return;
@@ -73,9 +86,17 @@ const Cabinets: React.FC = () => {
   const fetchRooms = async () => {
     try {
       const response = await axios.get(`${API_URL}/rooms`);
-      setRooms(response.data);
+      let fetchedRooms = response.data;
+      
+      // For operators, filter to only their assigned room
+      if (isAdmin === false && operatorRoomId) {
+        fetchedRooms = fetchedRooms.filter((room: Room) => room.id === operatorRoomId);
+      }
+      
+      setRooms(fetchedRooms);
     } catch (err) {
       console.error('Failed to fetch rooms:', err);
+      setError('Failed to fetch rooms');
     }
   };
 
@@ -234,6 +255,18 @@ const Cabinets: React.FC = () => {
     return null;
   };
 
+  // Show loading state while user data is being fetched
+  if (isAuthLoading || !user) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#012169] mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-1">
       <div className="max-w-8xl mx-auto space-y-3">
@@ -275,7 +308,7 @@ const Cabinets: React.FC = () => {
           </div>
         ) : (
           <>
-            {rooms.length > 0 && (
+            {rooms.length > 0 && isAdmin === true && (
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Rooms</h3>
                 <div className="flex flex-wrap gap-3">
@@ -378,14 +411,12 @@ const Cabinets: React.FC = () => {
                     Add shelves to begin controlling this cabinet.
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {shelvesByRow.map(({ row, shelves }) => (
-                      <div key={row} className="rounded-2xl bg-gray-100 dark:bg-gray-800/60 p-3">
-                        <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300">
-                          <span>{shelves.length} Shelves</span>
-                        </div>
-                        <div className="relative flex gap-2 overflow-hidden rounded-2xl bg-gradient-to-b from-gray-200 via-gray-100 to-gray-200 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-2">
-                          {shelves.map(shelf => {
+                  <div className="rounded-2xl bg-gray-100 dark:bg-gray-800/60 p-3">
+                    <div className="flex items-center justify-between text-xs text-gray-600 dark:text-gray-300 mb-2">
+                      <span>{selectedCabinet.shelves.length} Shelves</span>
+                    </div>
+                    <div className="relative flex gap-2 overflow-x-auto rounded-2xl bg-gradient-to-b from-gray-200 via-gray-100 to-gray-200 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-2">
+                      {shelvesByRow.flatMap(({ shelves }) => shelves).map(shelf => {
                             const shift = computeShelfShift(shelf);
                             const isActive = shelf.id === activeGapShelfId;
                             const isPending = pendingOpenShelfId === shelf.id;
@@ -395,7 +426,7 @@ const Cabinets: React.FC = () => {
                                 key={shelf.id}
                                 animate={{ x: shift }}
                                 transition={{ type: 'spring', stiffness: 140, damping: 18 }}
-                                className={`relative left-16 right-10  w-[80px] min-h-[200px] rounded-xl border bg-gradient-to-br from-gray-50 via-gray-200 to-gray-300 text-gray-900 shadow-inner ${
+                                className={`relative left-16 right-10  w-[80px] min-h-[200px] rounded-xl border bg-gradient-to-br from-gray-50 via-gray-200 to-gray-300 text-gray-900 shadow-inner flex-shrink-0 ${
                                   isActive ? 'ring-4 ring-amber-300 border-amber-400' : 'border-gray-400'
                                 }`}
                               >
@@ -426,10 +457,8 @@ const Cabinets: React.FC = () => {
                                 </div>
                               </motion.div>
                             );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

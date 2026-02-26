@@ -178,19 +178,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         if (status === 401) {
           logout();
-        } else if (status === 402 || status === 403) {
-          // Subscription expired or payment required
-          // Store error details for payment required page
+        } else if (status === 402) {
+          // 402 = Payment Required (subscription expired)
           const errorData = {
             status,
             message: error?.response?.data?.message || 'Subscription expired',
             room: currentRoom,
           };
           sessionStorage.setItem('payment_required_data', JSON.stringify(errorData));
-          
-          // Redirect to payment required page
           window.location.href = '/payment-required';
         }
+        // 403 is a permission error, not a payment issue — let individual pages handle it
         
         return Promise.reject(error);
       }
