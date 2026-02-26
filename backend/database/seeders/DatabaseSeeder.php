@@ -4,10 +4,13 @@ namespace Database\Seeders;
 
 use App\Models\Cabinet;
 use App\Models\Panel;
+use App\Models\Plan;
 use App\Models\Room;
 use App\Models\Shelf;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Support\HexCommandFormatter;
+use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,6 +25,8 @@ class DatabaseSeeder extends Seeder
             [$admin, $operator] = $this->seedUsers($rooms);
 
             $this->assignOperatorRooms($operator, $rooms);
+
+            $this->seedSubscriptions($rooms);
         });
     }
 
@@ -97,6 +102,51 @@ class DatabaseSeeder extends Seeder
 
         $operator->rooms()->syncWithoutDetaching($operatorRoomIds);
         $operator->update(['room_id' => $operatorRoomIds[0]]);
+    }
+
+    /**
+     * Seed subscription plans and create active subscriptions for all rooms.
+     */
+    private function seedSubscriptions(array $rooms): void
+    {
+        // Create the default plan
+        $plan = Plan::updateOrCreate(
+            ['name' => 'Annual License'],
+            [
+                'description' => 'Standard annual subscription plan for Smart Shelves system',
+                'price' => 99.00,
+                'period_days' => 365,
+                'is_active' => true,
+            ]
+        );
+
+        // Create active subscriptions for all rooms (1 year from now)
+        $startDate = Carbon::now();
+        $endDate = $startDate->copy()->addDays(365);
+        $graceEndDate = $endDate->copy()->addDays(7);
+
+        foreach ($rooms as $room) {
+            // Check if subscription already exists
+            $existingSubscription = Subscription::where('room_id', $room->id)->first();
+            
+            if (!$existingSubscription) {
+                Subscription::create([
+                    'room_id' => $room->id,
+                    'plan_id' => $plan->id,
+                    'status' => 'active',
+                    'starts_at' => $startDate,
+                    'ends_at' => $endDate,
+                    'grace_ends_at' => $graceEndDate,
+                    'auto_renew' => false,
+                ]);
+            }
+
+            // Update room subscription status
+            $room->update([
+                'subscription_status' => 'active',
+                'subscription_expires_at' => $endDate,
+            ]);
+        }
     }
 
     private function seedPanelsAndCabinets(Room $room, array $panelDefinitions): void
