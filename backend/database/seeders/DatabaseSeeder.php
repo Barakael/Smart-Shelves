@@ -6,9 +6,7 @@ use App\Models\Cabinet;
 use App\Models\Panel;
 use App\Models\Room;
 use App\Models\Shelf;
-use App\Models\SubscriptionPlan;
 use App\Models\User;
-use App\Services\SubscriptionService;
 use App\Support\HexCommandFormatter;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +17,6 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function () {
-            $this->seedSubscriptionPlans();
-
             $rooms = $this->seedInfrastructure();
 
             [$admin, $operator] = $this->seedUsers($rooms);
@@ -101,19 +97,6 @@ class DatabaseSeeder extends Seeder
 
         $operator->rooms()->syncWithoutDetaching($operatorRoomIds);
         $operator->update(['room_id' => $operatorRoomIds[0]]);
-
-        // Activate Standard subscription plan for each operator room
-        $subscriptionService = app(SubscriptionService::class);
-        $standardPlan = SubscriptionPlan::where('name', 'Standard')->first();
-
-        if ($standardPlan) {
-            foreach ($operatorRoomIds as $roomId) {
-                $room = Room::find($roomId);
-                if ($room && !$room->subscription) {
-                    $subscriptionService->activateSubscription($room, $standardPlan->id);
-                }
-            }
-        }
     }
 
     private function seedPanelsAndCabinets(Room $room, array $panelDefinitions): void
@@ -539,46 +522,5 @@ class DatabaseSeeder extends Seeder
             ],
         ];
     }
-
-    /**
-     * Seed subscription plans.
-     */
-    private function seedSubscriptionPlans(): void
-    {
-        $plans = [
-            [
-                'name' => 'Standard',
-                'price' => 99.99,
-                'period_days' => 365,
-                'description' => 'Standard annual subscription for Smart Shelves system.',
-                'features' => json_encode(['users' => 10, 'cabinets' => 5, 'documents' => null]),
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Professional',
-                'price' => 199.99,
-                'period_days' => 365,
-                'description' => 'Professional annual subscription with extended features.',
-                'features' => json_encode(['users' => 25, 'cabinets' => 15, 'documents' => null]),
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Enterprise',
-                'price' => 499.99,
-                'period_days' => 365,
-                'description' => 'Enterprise annual subscription with unlimited features.',
-                'features' => json_encode(['users' => null, 'cabinets' => null, 'documents' => null]),
-                'is_active' => true,
-            ],
-        ];
-
-        foreach ($plans as $plan) {
-            SubscriptionPlan::updateOrCreate(
-                ['name' => $plan['name']],
-                $plan
-            );
-        }
-    }
 }
-
 

@@ -12,12 +12,6 @@ class Room extends Model
     protected $fillable = [
         'name',
         'description',
-        'subscription_status',
-        'subscription_status_checked_at',
-    ];
-
-    protected $casts = [
-        'subscription_status_checked_at' => 'datetime',
     ];
 
     public function shelves()
@@ -38,11 +32,6 @@ class Room extends Model
     public function documents()
     {
         return $this->hasMany(Document::class);
-    }
-
-    public function subscription()
-    {
-        return $this->hasOne(Subscription::class);
     }
 }
 
