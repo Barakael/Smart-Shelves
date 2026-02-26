@@ -41,7 +41,7 @@ interface AuthContextType {
   token: string | null;
   currentRoom: Room | null;
   accessibleRooms: Room[];
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   setCurrentRoom: (roomId: number) => Promise<void>;
@@ -138,7 +138,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await loadRoomDetails(roomId);
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<User> => {
     try {
       const response = await axios.post(`${API_URL}/login`, { email, password });
       const { token: newToken, user: userData } = response.data;
@@ -146,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(userData);
       localStorage.setItem('token', newToken);
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+      return userData;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Login failed');
     }
