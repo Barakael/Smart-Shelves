@@ -41,6 +41,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('shelves', ShelfController::class);
     Route::apiResource('rooms', RoomController::class);
     
+    // Room subscription status
+    Route::get('/rooms/{room}/subscription-status', [AuthController::class, 'getSubscriptionStatus']);
+    
     // Cabinet routes
     Route::get('/cabinets', [CabinetController::class, 'index']);
     Route::post('/cabinets', [CabinetController::class, 'store']);
