@@ -23,13 +23,13 @@ const Login = () => {
 
     try {
       if (isLogin) {
-        await login(email, password);
+        const userData = await login(email, password);
         
         // Load accessible rooms
         const rooms = await loadAccessibleRooms();
         
         // Check if user is admin (admins can choose any room, operators are locked to their primary room)
-        if (email === 'admin@smartshelves.com') {
+        if (userData.role === 'admin') {
           // Show room selector for admin (admin can choose any room)
           setAccessibleRooms(rooms);
           setShowRoomSelector(true);
