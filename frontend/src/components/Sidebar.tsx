@@ -7,11 +7,11 @@ const Sidebar = () => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    ...(user?.role === 'admin' ? [{ icon: Wifi, label: 'Cabinets', path: '/cabinets' }] : []),
+    { icon: Wifi, label: 'Cabinets', path: '/cabinets' },
     { icon: FileText, label: 'Documents', path: '/documents' },
     { icon: History, label: 'History', path: '/history' },
     ...(user?.role === 'admin' ? [{ icon: Users, label: 'Users', path: '/users' }] : []),
-    ...(user?.role === 'admin' ? [{ icon: CreditCard, label: 'Payment Management', path: '/payment-management' }] : []),
+    { icon: CreditCard, label: 'Payment', path: '/payment-management' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
