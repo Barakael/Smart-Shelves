@@ -14,28 +14,39 @@ const ADMIN_PASSWORD = '12341234Q';
 
 type SettingsTab = 'personal' | 'configurations' | 'rooms';
 
-const settingsTabs: { key: SettingsTab; label: string }[] = [
+const allSettingsTabs: { key: SettingsTab; label: string }[] = [
   { key: 'personal', label: 'Personal' },
   { key: 'configurations', label: 'Configurations' },
   { key: 'rooms', label: 'Rooms' },
 ];
 
-const getTabFromSearch = (search: string): SettingsTab => {
+const adminOnlyTabs: SettingsTab[] = ['configurations', 'rooms'];
+
+const isAdminOnlyTab = (tab: SettingsTab) => adminOnlyTabs.includes(tab);
+
+const resolveTabFromSearch = (search: string, isAdmin: boolean): SettingsTab => {
   const tabParam = new URLSearchParams(search).get('tab');
   if (tabParam === 'configurations' || tabParam === 'rooms') {
-    return tabParam;
+    return isAdmin ? tabParam : 'personal';
   }
   return 'personal';
 };
 
 const Settings = () => {
   const { user, refreshUser } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const visibleTabs = useMemo(
+    () => (isAdmin ? allSettingsTabs : allSettingsTabs.filter(tab => tab.key === 'personal')),
+    [isAdmin],
+  );
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState<string>(user?.phone || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(() => getTabFromSearch(location.search));
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() =>
+    resolveTabFromSearch(location.search, user?.role === 'admin'),
+  );
   const [configAuthorized, setConfigAuthorized] = useState(false);
   const [configAccessOpen, setConfigAccessOpen] = useState(false);
   const [configAuthForm, setConfigAuthForm] = useState({ username: '', password: '' });
@@ -50,7 +61,14 @@ const Settings = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const desiredTab = getTabFromSearch(location.search);
+    const tabParam = new URLSearchParams(location.search).get('tab');
+    if (!isAdmin && tabParam && isAdminOnlyTab(tabParam as SettingsTab)) {
+      setActiveTab('personal');
+      navigate('/settings', { replace: true });
+      return;
+    }
+
+    const desiredTab = resolveTabFromSearch(location.search, isAdmin);
     if (desiredTab === 'configurations' && !configAuthorized) {
       setActiveTab('personal');
       setConfigAccessOpen(true);
@@ -60,9 +78,12 @@ const Settings = () => {
       return;
     }
     setActiveTab(desiredTab);
-  }, [location.search, configAuthorized, navigate]);
+  }, [location.search, configAuthorized, navigate, isAdmin]);
 
   const handleTabChange = (tab: SettingsTab) => {
+    if (!isAdmin && isAdminOnlyTab(tab)) {
+      return;
+    }
     if (tab === 'configurations' && !configAuthorized) {
       setConfigAccessOpen(true);
       setConfigAuthError(null);
@@ -150,11 +171,14 @@ const Settings = () => {
         transition={{ duration: 0.4 }}
       >
         <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400">Manage your profile and password</p>
+        <p className="text-gray-600 dark:text-gray-400">
+          {isAdmin ? 'Manage your profile, cabinets, and rooms' : 'Manage your profile and password'}
+        </p>
       </motion.div>
 
+      {visibleTabs.length > 1 && (
       <div className="flex gap-3 border-b border-gray-200 dark:border-gray-700">
-        {settingsTabs.map(({ key, label }) => (
+        {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => handleTabChange(key)}
@@ -168,6 +192,7 @@ const Settings = () => {
           </button>
         ))}
       </div>
+      )}
 
       {activeTab === 'personal' && (
         <>
@@ -292,16 +317,16 @@ const Settings = () => {
         </>
       )}
 
-      {activeTab === 'configurations' && <ConfigurationsTab />}
+      {isAdmin && activeTab === 'configurations' && <ConfigurationsTab />}
 
-      {activeTab === 'rooms' && (
+      {isAdmin && activeTab === 'rooms' && (
         <div className="pt-2">
           <RoomsPage />
         </div>
       )}
       </div>
 
-      {configAccessOpen && (
+      {isAdmin && configAccessOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
