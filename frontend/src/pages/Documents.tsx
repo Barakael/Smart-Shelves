@@ -11,6 +11,7 @@ import DocumentDetailModal from '../components/documents/DocumentDetailModal';
 import { DEFAULT_STATUSES, statusLabels } from '../components/documents/statusConfig';
 import { getApiUrl, getBulkServiceUrl } from '../config/environment';
 import templateUrl from '../resources/images/eShelfTemplate.csv?url';
+import pdfManifestTemplateUrl from '../resources/images/pdfRoadmapManifestTemplate.csv?url';
 
 const API_URL = getApiUrl();
 const BULK_API_URL = getBulkServiceUrl();
@@ -1160,6 +1161,13 @@ const Documents: React.FC = () => {
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   Upload a ZIP archive that includes your manifest (.csv/.xlsx) plus every referenced PDF. The manifest must match the Bulk PDF service requirements.
                 </p>
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-900/20 dark:text-blue-100">
+                  <p className="font-semibold">Manifest requirements</p>
+                  <p className="mt-1">
+                    Required columns: <code>filename</code>, <code>document_title</code>, <code>shelf_id</code>.
+                    The <code>filename</code> must exactly match each PDF name inside the ZIP.
+                  </p>
+                </div>
                 {pdfReport && (
                   <pre className="max-h-48 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
                     {pdfReport}
@@ -1176,6 +1184,12 @@ const Documents: React.FC = () => {
                     disabled={!isBulkServiceEnabled || isPdfImporting}
                   />
                 </label>
+                <div className="flex flex-wrap gap-3 text-sm font-semibold text-[#012169]">
+                  <a href={pdfManifestTemplateUrl} download className="inline-flex items-center gap-2">
+                    <Download className="h-4 w-4" />
+                    Download PDF manifest template
+                  </a>
+                </div>
                 {!isBulkServiceEnabled && (
                   <p className="text-sm text-red-600">
                     Configuration error: Bulk PDF service URL is not set up.
