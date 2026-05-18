@@ -29,7 +29,7 @@ Both the backend and frontend servers are now running:
    uvicorn app.main:app --reload --port 8100
    ```
 - **Endpoints**:
-   - `POST /api/bulk-import` – upload a ZIP containing PDFs plus `manifest.csv`/`manifest.xlsx`. Every manifest row must include `filename`, `document_title`, and `shelf_id`. Filenames must exist in the archive and `shelf_id` must map to a shelf with a configured GPIO pin.
+  - `POST /api/bulk-import` – upload a ZIP containing PDFs plus `manifest.csv`/`manifest.xlsx`. Every manifest row must include `filename`, `document_title`, and `shelf_id`. Optional columns: `docket`, `side`, `row_index`, `column_index`. Filenames must exist in the archive and `shelf_id` must map to a shelf with a configured GPIO pin.
    - `POST /api/shelves/{shelf_identifier}/open` – trigger the shelved solenoid via GPIO/relay (uses real `RPi.GPIO` hardware when available, otherwise logs a mock pulse).
 - **Cleanup**: The service extracts archives into `storage/tmp/` and automatically wipes the directory after each successful import.
 

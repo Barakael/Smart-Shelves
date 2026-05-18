@@ -288,6 +288,12 @@ class DocumentController extends Controller
             ]);
         }
 
+        if ($shelf->room_id !== null && (int) $shelf->room_id !== (int) $cabinet->room_id) {
+            throw ValidationException::withMessages([
+                'shelf_id' => ['Shelf room does not match the selected cabinet room.'],
+            ]);
+        }
+
         $data['shelf_label'] = $data['shelf_label'] ?? $shelf->name;
         $data['row_index'] = $data['row_index'] ?? $shelf->row_index;
         $data['column_index'] = $data['column_index'] ?? $shelf->column_index;
