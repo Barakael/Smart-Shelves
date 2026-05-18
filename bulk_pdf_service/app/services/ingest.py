@@ -116,6 +116,10 @@ class BulkIngestService:
             'manifest': {
                 'document_title': entry.document_title,
                 'shelf_identifier': entry.shelf_id,
+                'docket': entry.docket,
+                'side': entry.side,
+                'row_index': entry.row_index,
+                'column_index': entry.column_index,
             },
         }
 
@@ -124,6 +128,10 @@ class BulkIngestService:
             name=entry.document_title,
             status='available',
             shelf_label=shelf.name,
+            docket=entry.docket,
+            side=entry.side,
+            row_index=entry.row_index,
+            column_index=entry.column_index,
             cabinet_id=shelf.cabinet_id,
             room_id=shelf.room_id,
             shelf_id=shelf.id,
