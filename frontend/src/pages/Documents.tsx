@@ -10,6 +10,7 @@ import DocumentTable from '../components/documents/DocumentTable';
 import DocumentDetailModal from '../components/documents/DocumentDetailModal';
 import { DEFAULT_STATUSES, statusLabels } from '../components/documents/statusConfig';
 import { getApiUrl, getBulkServiceUrl } from '../config/environment';
+import { useAuth } from '../contexts/AuthContext';
 import templateUrl from '../resources/images/eShelfTemplate.csv?url';
 import pdfManifestTemplateUrl from '../resources/images/pdfRoadmapManifestTemplate.csv?url';
 
@@ -81,6 +82,8 @@ const formatFileSize = (bytes: number): string => {
 };
 
 const Documents: React.FC = () => {
+  const { user } = useAuth();
+  const isOperator = user?.role === 'operator';
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -254,6 +257,11 @@ const Documents: React.FC = () => {
     if (!createForm.cabinet_id) return [];
     const cabinet = filterOptions.cabinets.find(cab => String(cab.id) === createForm.cabinet_id);
     return cabinet?.shelves ?? [];
+  }, [createForm.cabinet_id, filterOptions.cabinets]);
+
+  const selectedCreateCabinet = useMemo(() => {
+    if (!createForm.cabinet_id) return null;
+    return filterOptions.cabinets.find(cab => String(cab.id) === createForm.cabinet_id) ?? null;
   }, [createForm.cabinet_id, filterOptions.cabinets]);
 
   const fetchDocumentDetails = useCallback(async (documentId: string | number) => {
@@ -1003,6 +1011,16 @@ const Documents: React.FC = () => {
                         <option key={shelf.id} value={shelf.id}>{shelf.name}</option>
                       ))}
                     </select>
+                    {createForm.cabinet_id && createShelfOptions.length === 0 && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                        No shelves were found for this cabinet. You can still save this document using docket/side/row/column.
+                      </p>
+                    )}
+                    {isOperator && selectedCreateCabinet && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Operator scope: this cabinet belongs to your assigned room access.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</label>
@@ -1065,6 +1083,10 @@ const Documents: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Location fields (`docket`, `side`, `row`, `column`) are optional but recommended for retrieval accuracy.
+                </p>
 
                 <div className="space-y-2">
                   <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Attach PDF (optional)</label>
@@ -1165,6 +1187,7 @@ const Documents: React.FC = () => {
                   <p className="font-semibold">Manifest requirements</p>
                   <p className="mt-1">
                     Required columns: <code>filename</code>, <code>document_title</code>, <code>shelf_id</code>.
+                    Optional columns: <code>docket</code>, <code>side</code>, <code>row_index</code>, <code>column_index</code>.
                     The <code>filename</code> must exactly match each PDF name inside the ZIP.
                   </p>
                 </div>
@@ -1187,7 +1210,7 @@ const Documents: React.FC = () => {
                 <div className="flex flex-wrap gap-3 text-sm font-semibold text-[#012169]">
                   <a href={pdfManifestTemplateUrl} download className="inline-flex items-center gap-2">
                     <Download className="h-4 w-4" />
-                    Download PDF manifest template
+                    Download extended PDF manifest template
                   </a>
                 </div>
                 {!isBulkServiceEnabled && (

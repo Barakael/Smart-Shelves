@@ -1,4 +1,4 @@
-filename,document_title,shelf_id
-payroll_q1.pdf,Payroll Register Q1,1
-contracts_2026.pdf,Customer Contracts 2026,shelf-02
-invoices_jan.pdf,Supplier Invoices January,7
+filename,document_title,shelf_id,docket,side,row_index,column_index
+payroll_q1.pdf,Payroll Register Q1,1,101,L,1,1
+contracts_2026.pdf,Customer Contracts 2026,shelf-02,102,R,1,2
+invoices_jan.pdf,Supplier Invoices January,7,103,L,2,1
