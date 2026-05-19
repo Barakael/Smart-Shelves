@@ -10,7 +10,7 @@ const Sidebar = () => {
     { icon: Wifi, label: 'Cabinets', path: '/cabinets' },
     { icon: FileText, label: 'Documents', path: '/documents' },
     { icon: History, label: 'History', path: '/history' },
-    ...(user?.role === 'admin' ? [{ icon: Users, label: 'Users', path: '/users' }] : []),
+    ...(user?.role === 'admin' || user?.role === 'manager' ? [{ icon: Users, label: 'Users', path: '/users' }] : []),
     { icon: CreditCard, label: 'Payment', path: '/payment-management' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
