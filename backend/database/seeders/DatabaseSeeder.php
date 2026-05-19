@@ -727,7 +727,7 @@ class DatabaseSeeder extends Seeder
 
     private function registryShelfName(int $areaNumber, int $panelNumber): string
     {
-        return sprintf('%s Panel %d', $this->registryCabinetName($areaNumber), $panelNumber);
+        return sprintf('panel-%d', $panelNumber);
     }
 
     private function registryPanelBankName(int $areaNumber): string
