@@ -4,12 +4,28 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { getApiUrl } from '../config/environment';
+
+const API_URL = getApiUrl();
+
+interface NotificationItem {
+  id: number;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
 
 const Navbar = () => {
   const { theme, toggleTheme } = useTheme();
   const { user, logout, currentRoom, accessibleRooms, setCurrentRoom, loadAccessibleRooms } = useAuth();
   const navigate = useNavigate();
   const [showRoomDropdown, setShowRoomDropdown] = useState(false);
+  const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [rooms, setRooms] = useState<any[]>([]);
 
   useEffect(() => {
@@ -19,6 +35,65 @@ const Navbar = () => {
       loadAccessibleRooms().then(setRooms);
     }
   }, [accessibleRooms]);
+
+  useEffect(() => {
+    if (!user) return;
+    loadUnreadCount();
+  }, [user?.id]);
+
+  const loadNotifications = async () => {
+    try {
+      setIsLoadingNotifications(true);
+      const { data } = await axios.get<NotificationItem[]>(`${API_URL}/notifications`);
+      setNotifications(data);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  const loadUnreadCount = async () => {
+    try {
+      const { data } = await axios.get<{ count: number }>(`${API_URL}/notifications/unread-count`);
+      setUnreadCount(data.count || 0);
+    } catch (error) {
+      console.error('Failed to load unread notification count:', error);
+    }
+  };
+
+  const handleNotificationToggle = async () => {
+    const nextValue = !showNotificationDropdown;
+    setShowNotificationDropdown(nextValue);
+    setShowRoomDropdown(false);
+
+    if (nextValue) {
+      await loadNotifications();
+      await loadUnreadCount();
+    }
+  };
+
+  const handleMarkRead = async (notificationId: number) => {
+    try {
+      await axios.put(`${API_URL}/notifications/${notificationId}/read`);
+      setNotifications(prev => prev.map(item => (
+        item.id === notificationId ? { ...item, is_read: true } : item
+      )));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await axios.put(`${API_URL}/notifications/read-all`);
+      setNotifications(prev => prev.map(item => ({ ...item, is_read: true })));
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -79,8 +154,8 @@ const Navbar = () => {
                 </h1>
               </div>
               
-              {/* Room Switcher - Only for Admins */}
-              {user?.role === 'admin' && rooms.length > 0 && (
+              {/* Room Switcher - Admins and managers can switch */}
+              {(user?.role === 'admin' || user?.role === 'manager') && rooms.length > 0 && (
                 <div className="relative">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -145,13 +220,66 @@ const Navbar = () => {
               </motion.p>
             </div>
             <div className="flex items-center space-x-3">
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className="p-2 rounded-lg bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
-              >
-                <Bell className="w-5 h-5" />
-              </motion.button>
+              <div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleNotificationToggle}
+                  className="relative p-2 rounded-lg bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 transition-colors"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-[10px] leading-[18px] text-white font-semibold px-1 text-center">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </motion.button>
+                <AnimatePresence>
+                  {showNotificationDropdown && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      className="absolute right-0 mt-2 w-96 max-w-[90vw] rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
+                        <button
+                          type="button"
+                          onClick={handleMarkAllRead}
+                          className="text-xs font-semibold text-[#012169] dark:text-blue-300 hover:underline"
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      <div className="max-h-96 overflow-y-auto">
+                        {isLoadingNotifications ? (
+                          <div className="px-4 py-6 text-sm text-gray-500 dark:text-gray-400">Loading notifications...</div>
+                        ) : notifications.length === 0 ? (
+                          <div className="px-4 py-6 text-sm text-gray-500 dark:text-gray-400">No notifications yet.</div>
+                        ) : (
+                          notifications.map((notification) => (
+                            <button
+                              key={notification.id}
+                              type="button"
+                              onClick={() => handleMarkRead(notification.id)}
+                              className={`w-full text-left px-4 py-3 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/70 ${
+                                notification.is_read ? '' : 'bg-blue-50/60 dark:bg-blue-900/10'
+                              }`}
+                            >
+                              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{notification.title}</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{notification.message}</p>
+                              <p className="text-[11px] text-gray-400 mt-1">
+                                {new Date(notification.created_at).toLocaleString()}
+                              </p>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
               {/* <div className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-white/20 backdrop-blur-sm">
                 <User className="w-4 h-4 text-white" />
                 <span className="text-sm font-medium text-white hidden sm:inline">
