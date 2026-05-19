@@ -418,6 +418,7 @@ function ConfigurationsTab() {
     shelf_count: 1,
     room_id: '',
     is_active: true,
+    is_sensitive: false,
   });
   const [testingConnection, setTestingConnection] = useState<number | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<Record<number, boolean>>({});
@@ -659,6 +660,7 @@ function ConfigurationsTab() {
         shelf_count: cabinet.shelf_count ?? cabinet.shelves?.length ?? 1,
         room_id: cabinet.room_id.toString(),
         is_active: cabinet.is_active,
+        is_sensitive: !!cabinet.is_sensitive,
       });
     } else {
       setEditingCabinet(null);
@@ -673,6 +675,7 @@ function ConfigurationsTab() {
         shelf_count: 1,
         room_id: '',
         is_active: true,
+        is_sensitive: false,
       });
     }
     setIsModalOpen(true);
@@ -1052,6 +1055,7 @@ function ConfigurationsTab() {
                 <p><strong>Checksum Offset:</strong> 0x{formattedChecksumOffset || '00'} ({checksumDecimalDisplay})</p>
                 <p><strong>Configured Shelves:</strong> {configuredShelfCount || '—'}</p>
                 <p><strong>Shelf Layout:</strong> {(shelfLayoutRows || 1)} rows × {(shelfLayoutColumns || 1)} columns</p>
+                <p><strong>Sensitive:</strong> {selectedCabinet.is_sensitive ? 'Yes' : 'No'}</p>
               </div>
             </div>
 
@@ -1386,7 +1390,7 @@ function ConfigurationsTab() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
                 <input
                   type="checkbox"
                   name="is_active"
@@ -1397,6 +1401,17 @@ function ConfigurationsTab() {
                 />
                 <label htmlFor="config_is_active" className="text-sm text-gray-700 dark:text-gray-300">
                   Active
+                </label>
+                <input
+                  type="checkbox"
+                  name="is_sensitive"
+                  checked={formData.is_sensitive}
+                  onChange={handleInputChange}
+                  id="config_is_sensitive"
+                  className="w-4 h-4 rounded"
+                />
+                <label htmlFor="config_is_sensitive" className="text-sm text-gray-700 dark:text-gray-300">
+                  Sensitive (send open alerts)
                 </label>
               </div>
 
