@@ -31,8 +31,8 @@ class DocumentController extends Controller
             $query->where('is_active', (bool) $request->boolean('is_active'));
         }
 
-        if ($user->isOperator()) {
-            $roomIds = $user->rooms->pluck('id');
+        if (!$user->isAdmin()) {
+            $roomIds = collect($user->accessibleRoomIds());
             if ($roomIds->isEmpty()) {
                 return response()->json($query->whereRaw('1 = 0')->paginate($this->perPage($request)));
             }
@@ -158,8 +158,8 @@ class DocumentController extends Controller
         $user = $request->user()->loadMissing('rooms');
         $roomQuery = Room::query()->orderBy('name');
 
-        if ($user->isOperator()) {
-            $roomIds = $user->rooms->pluck('id');
+        if (!$user->isAdmin()) {
+            $roomIds = collect($user->accessibleRoomIds());
             if ($roomIds->isEmpty()) {
                 return response()->json([
                     'rooms' => [],
@@ -302,12 +302,11 @@ class DocumentController extends Controller
     private function guardRoomAccess(Request $request, ?int $roomId): ?JsonResponse
     {
         $user = $request->user()->loadMissing('rooms');
-        if (!$user->isOperator() || $roomId === null) {
+        if ($user->isAdmin() || $roomId === null) {
             return null;
         }
 
-        $rooms = $user->rooms->pluck('id');
-        if ($rooms->isEmpty() || !$rooms->contains($roomId)) {
+        if (!$user->canAccessRoom($roomId)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
