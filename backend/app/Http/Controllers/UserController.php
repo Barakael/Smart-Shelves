@@ -12,11 +12,26 @@ class UserController extends Controller
     /**
      * Display a listing of users.
      */
-    public function index()
+    public function index(Request $request)
     {
+        $actor = $request->user();
+        if (!$actor->canManageOperators()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $users = User::with('room:id,name')
             ->select('id', 'name', 'email', 'role', 'room_id', 'created_at')
             ->orderBy('created_at', 'desc')
+            ->when($actor->isManager(), function ($query) use ($actor) {
+                $roomIds = $actor->accessibleRoomIds();
+                $query->where('role', 'operator')
+                    ->where(function ($subQuery) use ($roomIds) {
+                        $subQuery->whereNull('room_id');
+                        if (!empty($roomIds)) {
+                            $subQuery->orWhereIn('room_id', $roomIds);
+                        }
+                    });
+            })
             ->get();
 
         return response()->json($users);
@@ -27,8 +42,8 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        // Only admins can create users
-        if (!$request->user()->isAdmin()) {
+        $actor = $request->user();
+        if (!$actor->canManageOperators()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -36,18 +51,30 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
-            'role' => ['nullable', Rule::in(['admin', 'operator'])],
+            'role' => ['nullable', Rule::in(['admin', 'manager', 'operator'])],
             'room_id' => 'nullable|exists:rooms,id',
         ]);
 
         // Default to operator role if not specified
         $role = $validated['role'] ?? 'operator';
 
+        if ($actor->isManager() && $role !== 'operator') {
+            return response()->json([
+                'message' => 'Managers can only create operator accounts.'
+            ], 403);
+        }
+
         // Security: Prevent creating multiple admin accounts
         // Only admin@smartshelves.com should be admin
         if ($role === 'admin' && $validated['email'] !== 'admin@smartshelves.com') {
             return response()->json([
                 'message' => 'Only admin@smartshelves.com can have admin role. New users must be operators.'
+            ], 403);
+        }
+
+        if ($actor->isManager() && !empty($validated['room_id']) && !$actor->canAccessRoom((int) $validated['room_id'])) {
+            return response()->json([
+                'message' => 'Managers can only assign operators to their own rooms.'
             ], 403);
         }
 
@@ -59,6 +86,10 @@ class UserController extends Controller
             'room_id' => $validated['room_id'] ?? null,
         ]);
 
+        if ($user->room_id) {
+            $user->rooms()->sync([$user->room_id]);
+        }
+
         return response()->json([
             'message' => 'User created successfully',
             'user' => $user
@@ -68,11 +99,20 @@ class UserController extends Controller
     /**
      * Display the specified user.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $actor = $request->user();
+        if (!$actor->canManageOperators()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $user = User::with('room:id,name')
             ->select('id', 'name', 'email', 'role', 'room_id', 'created_at')
             ->findOrFail($id);
+
+        if ($actor->isManager() && ($user->role !== 'operator' || ($user->room_id && !$actor->canAccessRoom($user->room_id)))) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
         return response()->json($user);
     }
@@ -82,8 +122,8 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
-        // Only admins can update users
-        if (!$request->user()->isAdmin()) {
+        $actor = $request->user();
+        if (!$actor->canManageOperators()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -93,9 +133,25 @@ class UserController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'email' => ['sometimes', 'required', 'email', Rule::unique('users')->ignore($user->id)],
             'password' => 'sometimes|nullable|string|min:6',
-            'role' => ['sometimes', 'required', Rule::in(['admin', 'operator'])],
+            'role' => ['sometimes', 'required', Rule::in(['admin', 'manager', 'operator'])],
             'room_id' => 'sometimes|nullable|exists:rooms,id',
         ]);
+
+        if ($actor->isManager()) {
+            if ($user->role !== 'operator') {
+                return response()->json(['message' => 'Managers can only edit operators.'], 403);
+            }
+
+            if (isset($validated['role']) && $validated['role'] !== 'operator') {
+                return response()->json(['message' => 'Managers cannot change role away from operator.'], 403);
+            }
+
+            if (array_key_exists('room_id', $validated) && !empty($validated['room_id']) && !$actor->canAccessRoom((int) $validated['room_id'])) {
+                return response()->json([
+                    'message' => 'Managers can only assign operators to their own rooms.'
+                ], 403);
+            }
+        }
 
         if (isset($validated['name'])) {
             $user->name = $validated['name'];
@@ -119,6 +175,14 @@ class UserController extends Controller
 
         $user->save();
 
+        if (array_key_exists('room_id', $validated)) {
+            if ($user->room_id) {
+                $user->rooms()->sync([$user->room_id]);
+            } else {
+                $user->rooms()->detach();
+            }
+        }
+
         return response()->json([
             'message' => 'User updated successfully',
             'user' => $user
@@ -130,17 +194,28 @@ class UserController extends Controller
      */
     public function destroy(Request $request, $id)
     {
-        // Only admins can delete users
-        if (!$request->user()->isAdmin()) {
+        $actor = $request->user();
+        if (!$actor->canManageOperators()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         // Prevent self-deletion
-        if ($request->user()->id == $id) {
+        if ($actor->id == $id) {
             return response()->json(['message' => 'Cannot delete your own account'], 400);
         }
 
         $user = User::findOrFail($id);
+
+        if ($actor->isManager()) {
+            if ($user->role !== 'operator') {
+                return response()->json(['message' => 'Managers can only delete operators.'], 403);
+            }
+
+            if ($user->room_id && !$actor->canAccessRoom($user->room_id)) {
+                return response()->json(['message' => 'Operator is outside your managed rooms.'], 403);
+            }
+        }
+
         $user->delete();
 
         return response()->json([
