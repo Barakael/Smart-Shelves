@@ -11,7 +11,7 @@ interface User {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'operator';
+  role: 'admin' | 'manager' | 'operator';
   room_id?: number | null;
   room?: { id: number; name: string };
   created_at: string;
@@ -26,7 +26,7 @@ interface UserFormData {
   name: string;
   email: string;
   password: string;
-  role: 'admin' | 'operator';
+  role: 'admin' | 'manager' | 'operator';
   room_id?: number | null;
 }
 
@@ -161,7 +161,7 @@ const Users = () => {
     });
   };
 
-  if (currentUser?.role !== 'admin') {
+  if (currentUser?.role !== 'admin' && currentUser?.role !== 'manager') {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-gray-600 dark:text-gray-400">You don't have permission to access this page.</p>
@@ -188,7 +188,7 @@ const Users = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Users Management</h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Manage system operators and administrators
+            Manage operator accounts and room assignments
           </p>
         </div>
         <button
@@ -261,6 +261,8 @@ const Users = () => {
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         user.role === 'admin'
                           ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300'
+                          : user.role === 'manager'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300'
                           : 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
                       }`}
                     >
@@ -268,7 +270,7 @@ const Users = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {user.role === 'operator' ? (
+                    {user.role === 'operator' || user.role === 'manager' ? (
                       user.room ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">
                           {user.room.name}
@@ -408,21 +410,22 @@ const Users = () => {
                     </label>
                     <select
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'operator' })}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as 'admin' | 'manager' | 'operator' })}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-[#012169] focus:border-transparent bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                       required
                     >
                       <option value="operator">Operator</option>
+                      {currentUser?.role === 'admin' && <option value="manager">Manager</option>}
                     </select>
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Admin accounts are managed separately by system administrators
+                      Managers can supervise operators; admin accounts are managed separately.
                     </p>
                   </div>
 
-                  {formData.role === 'operator' && (
+                  {(formData.role === 'operator' || formData.role === 'manager') && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Assigned Room
+                        Primary Room
                       </label>
                       <select
                         value={formData.room_id || ''}
@@ -437,7 +440,7 @@ const Users = () => {
                         ))}
                       </select>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Select the room this operator will work in
+                        Select the primary room assignment for this account
                       </p>
                     </div>
                   )}
