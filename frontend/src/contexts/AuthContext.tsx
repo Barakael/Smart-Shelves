@@ -4,7 +4,7 @@ import { getApiUrl } from '../config/environment';
 
 const API_URL = getApiUrl();
 
-type UserRole = 'admin' | 'operator';
+type UserRole = 'admin' | 'manager' | 'operator';
 
 interface User {
   id: number;
@@ -78,14 +78,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Load accessible rooms after user is fetched
       await loadAccessibleRoomsInternal();
       
-      // Operators are locked to their primary room; admins can choose
+      // Operators are locked to their primary room; admins/managers can choose
       if (response.data.role === 'operator') {
         // Operators always use their primary room
         if (response.data.room_id) {
           await loadRoomDetails(response.data.room_id);
         }
       } else {
-        // Admins can choose - use saved room or primary room
+        // Admins and managers can choose - use saved room or primary room
         const savedRoomId = localStorage.getItem('current_room_id');
         if (savedRoomId) {
           await loadRoomDetails(parseInt(savedRoomId));

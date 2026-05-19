@@ -33,6 +33,7 @@ export interface Cabinet {
   macro_vent_command?: string | null;
   room_id: number;
   is_active: boolean;
+  is_sensitive?: boolean;
   is_connected?: boolean;
   last_seen?: string | null;
   shelves?: Shelf[];
