@@ -22,9 +22,10 @@ class DatabaseSeeder extends Seeder
         DB::transaction(function () {
             $rooms = $this->seedInfrastructure();
 
-            [$admin, $operator] = $this->seedUsers($rooms);
+            [$admin, $manager, $operator] = $this->seedUsers($rooms);
 
             $this->assignOperatorRooms($operator, $rooms);
+            $this->assignManagerRooms($manager, $rooms);
 
             $this->seedSubscriptions($rooms);
         });
@@ -82,7 +83,18 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        return [$admin, $operator];
+        $manager = User::updateOrCreate(
+            ['email' => 'manager@smartshelves.com'],
+            [
+                'name' => 'Vault Manager',
+                'password' => Hash::make('12341234Q'),
+                'phone' => '+1 (555) 010-0003',
+                'role' => 'manager',
+                'room_id' => $primaryRoomId,
+            ]
+        );
+
+        return [$admin, $manager, $operator];
     }
 
     private function assignOperatorRooms(User $operator, array $rooms): void
@@ -102,6 +114,25 @@ class DatabaseSeeder extends Seeder
 
         $operator->rooms()->syncWithoutDetaching($operatorRoomIds);
         $operator->update(['room_id' => $operatorRoomIds[0]]);
+    }
+
+    private function assignManagerRooms(User $manager, array $rooms): void
+    {
+        if (!$manager->exists) {
+            return;
+        }
+
+        $managerRoomIds = collect($rooms)
+            ->take(2)
+            ->pluck('id')
+            ->all();
+
+        if (empty($managerRoomIds)) {
+            return;
+        }
+
+        $manager->rooms()->syncWithoutDetaching($managerRoomIds);
+        $manager->update(['room_id' => $managerRoomIds[0]]);
     }
 
     /**
@@ -278,6 +309,7 @@ class DatabaseSeeder extends Seeder
     private function infrastructure(): array
     {
         return [
+            $this->buildRegistryRoomConfig(),
             [
                 'slug' => 'vault-alpha',
                 'name' => 'Vault Alpha',
@@ -571,6 +603,79 @@ class DatabaseSeeder extends Seeder
                 ],
             ],
         ];
+    }
+
+    private function buildRegistryRoomConfig(): array
+    {
+        return [
+            'slug' => 'registry',
+            'name' => 'Registry',
+            'description' => 'Registry room with Area-1 to Area-4 cabinet banks.',
+            'panels' => [
+                $this->buildRegistryAreaConfig(1),
+                $this->buildRegistryAreaConfig(2),
+                $this->buildRegistryAreaConfig(3),
+                $this->buildRegistryAreaConfig(4),
+            ],
+        ];
+    }
+
+    private function buildRegistryAreaConfig(int $areaNumber): array
+    {
+        $functionByte = strtoupper(str_pad(dechex($areaNumber), 2, '0', STR_PAD_LEFT));
+        $checksumOffset = 0x0A;
+        $cabinetIp = sprintf('192.168.10.%d', 10 + $areaNumber);
+
+        return [
+            'name' => "Area-{$areaNumber} Panel Bank",
+            'ip_address' => $cabinetIp,
+            'rows' => 5,
+            'columns' => 5,
+            'cabinet' => [
+                'name' => "Area-{$areaNumber}",
+                'ip_address' => $cabinetIp,
+                'port' => 8080,
+                'function_byte' => $functionByte,
+                'checksum_offset' => $checksumOffset,
+                'total_rows' => 5,
+                'total_columns' => 5,
+                'controller_row' => 0,
+                'controller_column' => 0,
+                'shelf_count' => 10,
+                'is_active' => true,
+                // Keep macros intentionally unchanged/blank for admin-side editing later.
+                'macro_close_command' => null,
+                'macro_lock_command' => null,
+                'macro_vent_command' => null,
+                'shelves' => $this->buildRegistryShelves($areaNumber, $functionByte, $checksumOffset),
+            ],
+        ];
+    }
+
+    private function buildRegistryShelves(int $areaNumber, string $functionByte, int $checksumOffset): array
+    {
+        $shelves = [];
+
+        for ($panel = 1; $panel <= 10; $panel++) {
+            $panelHex = strtoupper(str_pad(dechex($panel), 2, '0', STR_PAD_LEFT));
+            $checksumHex = strtoupper(str_pad(dechex($panel + $checksumOffset), 2, '0', STR_PAD_LEFT));
+            $openCommand = "68 04 09 {$functionByte} {$panelHex} {$checksumHex}";
+            $closeCommand = "68 03 08 {$functionByte} {$panelHex}";
+
+            $shelves[] = [
+                'name' => sprintf('Area-%d Panel %d', $areaNumber, $panel),
+                'column_index' => ($panel - 1) % 5,
+                'row_index' => intdiv($panel - 1, 5),
+                'controller' => sprintf('REG-A%d-P%02d', $areaNumber, $panel),
+                'ip_address' => sprintf('192.168.10.%d', 10 + $areaNumber),
+                'is_controller' => $panel === 1,
+                'open_command' => $openCommand,
+                'close_command' => $closeCommand,
+                'shelf_number' => $panel,
+            ];
+        }
+
+        return $shelves;
     }
 }
 
