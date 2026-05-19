@@ -556,6 +556,19 @@ function ConfigurationsTab() {
     return cabinets.find(cab => cab.id === selectedCabinetId) || null;
   }, [cabinets, selectedCabinetId]);
 
+  const selectedCabinetReference = useMemo(() => {
+    if (!selectedCabinet) return null;
+    const match = selectedCabinet.name.match(/^Area-(\d+)$/i);
+    if (!match) return null;
+
+    return {
+      areaLabel: `Area-${match[1]}`,
+      panelCount: selectedCabinet.shelf_count ?? selectedCabinet.shelves?.length ?? 0,
+      functionByte: selectedCabinet.function_byte?.toUpperCase().padStart(2, '0') || '--',
+      checksumOffsetHex: decimalToHexByte(selectedCabinet.checksum_offset ?? ''),
+    };
+  }, [selectedCabinet]);
+
   useEffect(() => {
     if (selectedCabinet) {
       setMacroFormData({
@@ -1057,6 +1070,18 @@ function ConfigurationsTab() {
                 <p><strong>Shelf Layout:</strong> {(shelfLayoutRows || 1)} rows × {(shelfLayoutColumns || 1)} columns</p>
                 <p><strong>Sensitive:</strong> {selectedCabinet.is_sensitive ? 'Yes' : 'No'}</p>
               </div>
+              {selectedCabinetReference && (
+                <div className="mt-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-900/20 px-3 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-900 dark:text-blue-100">
+                    Registry Reference (Seeded)
+                  </p>
+                  <p className="text-xs text-blue-800 dark:text-blue-200 mt-1">
+                    {selectedCabinetReference.areaLabel} • Panels: {selectedCabinetReference.panelCount} •
+                    Function: {selectedCabinetReference.functionByte} •
+                    Checksum offset: 0x{selectedCabinetReference.checksumOffsetHex || '00'}
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 shadow">
