@@ -18,7 +18,7 @@ class ShelfController extends Controller
         if ($user->isAdmin()) {
             $shelves = Shelf::all();
         } else {
-            $roomIds = $user->rooms->pluck('id');
+            $roomIds = $user->accessibleRoomIds();
             $shelves = Shelf::whereIn('room_id', $roomIds)->get();
         }
 
@@ -28,6 +28,9 @@ class ShelfController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+        if (!$user->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
         
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -52,7 +55,7 @@ class ShelfController extends Controller
         // Check access if panel_id is provided
         if ($validated['panel_id'] ?? null) {
             $panel = \App\Models\Panel::findOrFail($validated['panel_id']);
-            if ($user->isOperator() && $panel->room_id && !$user->rooms->contains($panel->room_id)) {
+            if (!$user->isAdmin() && $panel->room_id && !$user->canAccessRoom((int) $panel->room_id)) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
         }
@@ -80,7 +83,7 @@ class ShelfController extends Controller
         $shelf = Shelf::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && $shelf->room_id && !$user->rooms->contains($shelf->room_id)) {
+        if (!$user->isAdmin() && $shelf->room_id && !$user->canAccessRoom((int) $shelf->room_id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -92,7 +95,7 @@ class ShelfController extends Controller
         $shelf = Shelf::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && $shelf->room_id && !$user->rooms->contains($shelf->room_id)) {
+        if (!$user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -139,7 +142,7 @@ class ShelfController extends Controller
         $shelf = Shelf::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && $shelf->room_id && !$user->rooms->contains($shelf->room_id)) {
+        if (!$user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
