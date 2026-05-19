@@ -82,11 +82,21 @@ class AuthController extends Controller
         $user = auth()->user();
         $subscriptionService = app(SubscriptionService::class);
 
-        // Admins can see all rooms; operators see only their primary room
+        // Admins can see all rooms; managers see assigned rooms; operators see primary room
         if ($user->isAdmin()) {
             $rooms = Room::with('subscription.plan')
                 ->orderBy('name')
                 ->get();
+        } elseif ($user->isManager()) {
+            $rooms = $user->rooms()
+                ->with('subscription.plan')
+                ->orderBy('name')
+                ->get();
+            if ($rooms->isEmpty() && $user->room_id) {
+                $rooms = Room::with('subscription.plan')
+                    ->where('id', $user->room_id)
+                    ->get();
+            }
         } else {
             // Operators only see their primary room (room_id)
             $rooms = Room::with('subscription.plan')
@@ -129,8 +139,7 @@ class AuthController extends Controller
         $user = auth()->user();
 
         // Check if user has access to this room
-        // Admins can view any room; operators can only view their primary room
-        if (!$user->isAdmin() && $user->room_id !== $room->id) {
+        if (!$user->canAccessRoom($room->id)) {
             abort(403, 'Unauthorized to view this room\'s subscription');
         }
 

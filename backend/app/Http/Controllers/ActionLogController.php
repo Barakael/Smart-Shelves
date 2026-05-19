@@ -13,9 +13,9 @@ class ActionLogController extends Controller
         $query = ActionLog::with(['user', 'room', 'panel', 'shelf', 'cabinet'])
             ->orderBy('created_at', 'desc');
 
-        // Filter by room if operator
-        if ($user->isOperator()) {
-            $roomIds = $user->rooms->pluck('id');
+        // Filter by room scope for non-admin users
+        if (!$user->isAdmin()) {
+            $roomIds = collect($user->accessibleRoomIds());
             $query->whereIn('room_id', $roomIds);
         }
 
@@ -23,7 +23,7 @@ class ActionLogController extends Controller
         if ($request->has('room_id')) {
             $roomId = $request->room_id;
             // Check access
-            if ($user->isOperator() && !$user->rooms->contains($roomId)) {
+            if (!$user->isAdmin() && !$user->canAccessRoom((int) $roomId)) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
             $query->where('room_id', $roomId);
@@ -68,7 +68,7 @@ class ActionLogController extends Controller
         $log = ActionLog::with(['user', 'room', 'panel', 'shelf', 'cabinet'])->findOrFail($id);
 
         // Check access
-        if ($user->isOperator() && $log->room_id && !$user->rooms->contains($log->room_id)) {
+        if (!$user->isAdmin() && $log->room_id && !$user->canAccessRoom((int) $log->room_id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
