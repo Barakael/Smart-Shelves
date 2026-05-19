@@ -655,47 +655,59 @@ class DatabaseSeeder extends Seeder
     private function buildRegistryAreaConfig(int $areaNumber): array
     {
         $functionByte = $this->functionByteForArea($areaNumber);
-        $checksumOffset = 0x0A;
+        $checksumOffset = $this->checksumOffsetForArea($areaNumber);
         $cabinetIp = sprintf('192.168.10.%d', 10 + $areaNumber);
+        $layout = $this->registryLayoutForArea($areaNumber);
+        $macroCommands = $this->registryMacroCommands($functionByte, $checksumOffset);
 
         return [
             'name' => $this->registryPanelBankName($areaNumber),
             'ip_address' => $cabinetIp,
-            'rows' => 5,
-            'columns' => 5,
+            'rows' => $layout['rows'],
+            'columns' => $layout['columns'],
             'cabinet' => [
                 'name' => $this->registryCabinetName($areaNumber),
                 'ip_address' => $cabinetIp,
                 'port' => 8080,
                 'function_byte' => $functionByte,
                 'checksum_offset' => $checksumOffset,
-                'total_rows' => 5,
-                'total_columns' => 5,
+                'total_rows' => $layout['rows'],
+                'total_columns' => $layout['columns'],
                 'controller_row' => 0,
                 'controller_column' => 0,
-                'shelf_count' => 10,
+                'shelf_count' => $layout['shelf_count'],
                 'is_active' => true,
-                // Keep macros intentionally unchanged/blank for admin-side editing later.
-                'macro_close_command' => null,
-                'macro_lock_command' => null,
-                'macro_vent_command' => null,
-                'shelves' => $this->buildRegistryShelves($areaNumber, $functionByte, $checksumOffset),
+                'macro_close_command' => $macroCommands['macro_close_command'],
+                'macro_lock_command' => $macroCommands['macro_lock_command'],
+                'macro_vent_command' => $macroCommands['macro_vent_command'],
+                'shelves' => $this->buildRegistryShelves(
+                    $areaNumber,
+                    $functionByte,
+                    $checksumOffset,
+                    $layout['shelf_count'],
+                    $layout['columns']
+                ),
             ],
         ];
     }
 
-    private function buildRegistryShelves(int $areaNumber, string $functionByte, int $checksumOffset): array
-    {
+    private function buildRegistryShelves(
+        int $areaNumber,
+        string $functionByte,
+        int $checksumOffset,
+        int $shelfCount,
+        int $columns
+    ): array {
         $shelves = [];
 
-        for ($panel = 1; $panel <= 10; $panel++) {
+        for ($panel = 1; $panel <= $shelfCount; $panel++) {
             $openCommand = $this->buildOpenCommandFromConfig($functionByte, $panel, $checksumOffset);
             $closeCommand = $this->buildCloseCommandFromConfig($functionByte, $panel);
 
             $shelves[] = [
                 'name' => $this->registryShelfName($areaNumber, $panel),
-                'column_index' => ($panel - 1) % 5,
-                'row_index' => intdiv($panel - 1, 5),
+                'column_index' => ($panel - 1) % $columns,
+                'row_index' => intdiv($panel - 1, $columns),
                 'controller' => sprintf('REG-A%d-P%02d', $areaNumber, $panel),
                 'ip_address' => sprintf('192.168.10.%d', 10 + $areaNumber),
                 'is_controller' => $panel === 1,
@@ -726,6 +738,37 @@ class DatabaseSeeder extends Seeder
     private function functionByteForArea(int $areaNumber): string
     {
         return strtoupper(str_pad(dechex($areaNumber), 2, '0', STR_PAD_LEFT));
+    }
+
+    private function checksumOffsetForArea(int $areaNumber): int
+    {
+        // Matches provided command trend:
+        // Area-1 => 0x0A, Area-2 => 0x0B, Area-3 => 0x0C, Area-4 => 0x0D.
+        return 0x09 + $areaNumber;
+    }
+
+    private function registryLayoutForArea(int $areaNumber): array
+    {
+        return match ($areaNumber) {
+            2 => ['rows' => 5, 'columns' => 4, 'shelf_count' => 10],
+            3 => ['rows' => 5, 'columns' => 5, 'shelf_count' => 11],
+            4 => ['rows' => 5, 'columns' => 4, 'shelf_count' => 10],
+            default => ['rows' => 5, 'columns' => 5, 'shelf_count' => 10],
+        };
+    }
+
+    private function registryMacroCommands(string $functionByte, int $checksumOffset): array
+    {
+        $closeChecksum = $this->formatHexByte($checksumOffset + 1);
+        $lockChecksum = $this->formatHexByte($checksumOffset + 2);
+        $ventChecksum = $this->formatHexByte($checksumOffset + 3);
+        $normalizedFunction = strtoupper(str_pad($functionByte, 2, '0', STR_PAD_LEFT));
+
+        return [
+            'macro_close_command' => "68 04 09 {$normalizedFunction} 00 {$closeChecksum}",
+            'macro_lock_command' => "68 04 10 {$normalizedFunction} 00 {$lockChecksum}",
+            'macro_vent_command' => "68 04 11 {$normalizedFunction} 00 {$ventChecksum}",
+        ];
     }
 
     private function buildOpenCommandFromConfig(string $functionByte, int $panelNumber, int $checksumOffset): string
