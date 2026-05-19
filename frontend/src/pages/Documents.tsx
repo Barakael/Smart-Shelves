@@ -997,6 +997,9 @@ const Documents: React.FC = () => {
                         <option key={cabinet.id} value={cabinet.id}>{cabinet.name}</option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Excel mapping: Area name (e.g., <code>Area-1</code>) maps to Cabinet.
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Shelf</label>
@@ -1019,6 +1022,11 @@ const Documents: React.FC = () => {
                     {isOperator && selectedCreateCabinet && (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Operator scope: this cabinet belongs to your assigned room access.
+                      </p>
+                    )}
+                    {createForm.cabinet_id && createShelfOptions.length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Excel mapping: Panel label (e.g., <code>Area-1 Panel 3</code>) maps to Shelf.
                       </p>
                     )}
                   </div>
@@ -1141,6 +1149,16 @@ const Documents: React.FC = () => {
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   Upload a CSV or Excel file with columns {TEMPLATE_HEADERS.join(', ')}. The sample already lists areas area-1 through area-4 with their shelves.
                 </p>
+                <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/60 p-3 text-xs text-gray-700 dark:text-gray-200">
+                  <p className="font-semibold">Registry naming helper</p>
+                  <p className="mt-1">
+                    Use cabinet names exactly like <code>Area-1</code> ... <code>Area-4</code>, and shelf names like
+                    <code> Area-1 Panel 1</code> ... <code>Area-4 Panel 10</code>.
+                  </p>
+                  <p className="mt-1">
+                    Keep <code>docket</code>, <code>row</code>, and <code>column</code> for precise location indexing.
+                  </p>
+                </div>
                 {csvReport && (
                   <pre className="max-h-48 overflow-y-auto rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
                     {csvReport}

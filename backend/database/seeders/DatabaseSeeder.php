@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
+    private const REGISTRY_ROOM_NAME = 'Registry';
+    private const REGISTRY_AREA_PREFIX = 'Area-';
+    private const REGISTRY_FORCE_RESEED_ENV = 'FORCE_REGISTRY_RESEED';
+
     public function run(): void
     {
         DB::transaction(function () {
@@ -197,37 +201,65 @@ class DatabaseSeeder extends Seeder
             }
 
             $cabinetConfig = $panelConfig['cabinet'];
+            $isRegistryArea = $this->isRegistryAreaCabinet($room, $cabinetConfig['name'] ?? '');
+            $forceRegistryReseed = $this->shouldForceRegistryReseed();
 
-            $cabinet = Cabinet::updateOrCreate(
-                ['name' => $cabinetConfig['name'], 'room_id' => $room->id],
-                [
-                    'ip_address' => $cabinetConfig['ip_address'],
-                    'port' => $cabinetConfig['port'] ?? 8080,
-                    'function_byte' => strtoupper($cabinetConfig['function_byte']),
-                    'checksum_offset' => (int) $cabinetConfig['checksum_offset'],
-                    'shelf_count' => (int) $cabinetConfig['shelf_count'],
-                    'total_rows' => max(1, (int) ($cabinetConfig['total_rows'] ?? $panel->rows ?? 1)),
-                    'total_columns' => max(1, (int) ($cabinetConfig['total_columns'] ?? $panel->columns ?? 1)),
-                    'controller_row' => $cabinetConfig['controller_row'] ?? null,
-                    'controller_column' => $cabinetConfig['controller_column'] ?? null,
-                    'macro_close_command' => $this->normalizeHex($cabinetConfig['macro_close_command'] ?? null),
-                    'macro_lock_command' => $this->normalizeHex($cabinetConfig['macro_lock_command'] ?? null),
-                    'macro_vent_command' => $this->normalizeHex($cabinetConfig['macro_vent_command'] ?? null),
-                    'is_active' => $cabinetConfig['is_active'] ?? true,
-                ]
-            );
+            $cabinetIdentity = ['name' => $cabinetConfig['name'], 'room_id' => $room->id];
+            $cabinet = Cabinet::where($cabinetIdentity)->first();
 
-            $this->syncCabinetShelves($cabinet, $panel, $cabinetConfig);
+            $structurePayload = [
+                'function_byte' => strtoupper($cabinetConfig['function_byte']),
+                'checksum_offset' => (int) $cabinetConfig['checksum_offset'],
+                'shelf_count' => (int) $cabinetConfig['shelf_count'],
+                'total_rows' => max(1, (int) ($cabinetConfig['total_rows'] ?? $panel->rows ?? 1)),
+                'total_columns' => max(1, (int) ($cabinetConfig['total_columns'] ?? $panel->columns ?? 1)),
+                'controller_row' => $cabinetConfig['controller_row'] ?? null,
+                'controller_column' => $cabinetConfig['controller_column'] ?? null,
+            ];
+            $operationalPayload = [
+                'ip_address' => $cabinetConfig['ip_address'],
+                'port' => $cabinetConfig['port'] ?? 8080,
+                'macro_close_command' => $this->normalizeHex($cabinetConfig['macro_close_command'] ?? null),
+                'macro_lock_command' => $this->normalizeHex($cabinetConfig['macro_lock_command'] ?? null),
+                'macro_vent_command' => $this->normalizeHex($cabinetConfig['macro_vent_command'] ?? null),
+                'is_active' => $cabinetConfig['is_active'] ?? true,
+            ];
+
+            if (!$cabinet) {
+                $cabinet = Cabinet::create(array_merge($cabinetIdentity, $structurePayload, $operationalPayload));
+            } else {
+                $cabinet->fill($structurePayload);
+
+                // Preserve admin-edited operational fields for Registry unless explicitly forced.
+                if (!$isRegistryArea || $forceRegistryReseed) {
+                    $cabinet->fill($operationalPayload);
+                }
+
+                $cabinet->save();
+            }
+
+            $this->syncCabinetShelves($cabinet, $panel, $cabinetConfig, $isRegistryArea, $forceRegistryReseed);
         }
     }
 
-    private function syncCabinetShelves(Cabinet $cabinet, Panel $panel, array $cabinetConfig): void
+    private function syncCabinetShelves(
+        Cabinet $cabinet,
+        Panel $panel,
+        array $cabinetConfig,
+        bool $isRegistryArea = false,
+        bool $forceRegistryReseed = false
+    ): void
     {
         $shelfTemplates = $cabinetConfig['shelves'] ?? [];
         $desiredCount = count($shelfTemplates) ?: (int) ($cabinetConfig['shelf_count'] ?? max(1, $panel->columns));
         $rows = max(1, (int) ($panel->rows ?? $cabinet->total_rows ?? 1));
         $columns = max(1, (int) ($panel->columns ?? $cabinet->total_columns ?? 1));
         $timestamp = now();
+
+        if ($isRegistryArea && !$forceRegistryReseed && $cabinet->shelves()->exists()) {
+            // Keep admin-adjusted shelf names/commands unless reset is explicitly requested.
+            return;
+        }
 
         $cabinet->shelves()->delete();
 
@@ -622,17 +654,17 @@ class DatabaseSeeder extends Seeder
 
     private function buildRegistryAreaConfig(int $areaNumber): array
     {
-        $functionByte = strtoupper(str_pad(dechex($areaNumber), 2, '0', STR_PAD_LEFT));
+        $functionByte = $this->functionByteForArea($areaNumber);
         $checksumOffset = 0x0A;
         $cabinetIp = sprintf('192.168.10.%d', 10 + $areaNumber);
 
         return [
-            'name' => "Area-{$areaNumber} Panel Bank",
+            'name' => $this->registryPanelBankName($areaNumber),
             'ip_address' => $cabinetIp,
             'rows' => 5,
             'columns' => 5,
             'cabinet' => [
-                'name' => "Area-{$areaNumber}",
+                'name' => $this->registryCabinetName($areaNumber),
                 'ip_address' => $cabinetIp,
                 'port' => 8080,
                 'function_byte' => $functionByte,
@@ -657,13 +689,11 @@ class DatabaseSeeder extends Seeder
         $shelves = [];
 
         for ($panel = 1; $panel <= 10; $panel++) {
-            $panelHex = strtoupper(str_pad(dechex($panel), 2, '0', STR_PAD_LEFT));
-            $checksumHex = strtoupper(str_pad(dechex($panel + $checksumOffset), 2, '0', STR_PAD_LEFT));
-            $openCommand = "68 04 09 {$functionByte} {$panelHex} {$checksumHex}";
-            $closeCommand = "68 03 08 {$functionByte} {$panelHex}";
+            $openCommand = $this->buildOpenCommandFromConfig($functionByte, $panel, $checksumOffset);
+            $closeCommand = $this->buildCloseCommandFromConfig($functionByte, $panel);
 
             $shelves[] = [
-                'name' => sprintf('Area-%d Panel %d', $areaNumber, $panel),
+                'name' => $this->registryShelfName($areaNumber, $panel),
                 'column_index' => ($panel - 1) % 5,
                 'row_index' => intdiv($panel - 1, 5),
                 'controller' => sprintf('REG-A%d-P%02d', $areaNumber, $panel),
@@ -676,6 +706,54 @@ class DatabaseSeeder extends Seeder
         }
 
         return $shelves;
+    }
+
+    private function registryCabinetName(int $areaNumber): string
+    {
+        return self::REGISTRY_AREA_PREFIX . $areaNumber;
+    }
+
+    private function registryShelfName(int $areaNumber, int $panelNumber): string
+    {
+        return sprintf('%s Panel %d', $this->registryCabinetName($areaNumber), $panelNumber);
+    }
+
+    private function registryPanelBankName(int $areaNumber): string
+    {
+        return sprintf('%s Panel Bank', $this->registryCabinetName($areaNumber));
+    }
+
+    private function functionByteForArea(int $areaNumber): string
+    {
+        return strtoupper(str_pad(dechex($areaNumber), 2, '0', STR_PAD_LEFT));
+    }
+
+    private function buildOpenCommandFromConfig(string $functionByte, int $panelNumber, int $checksumOffset): string
+    {
+        $normalizedFunction = strtoupper(str_pad($functionByte, 2, '0', STR_PAD_LEFT));
+        $panelByte = $this->formatHexByte($panelNumber);
+        $checksum = $this->formatHexByte($panelNumber + $checksumOffset);
+
+        return "68 04 09 {$normalizedFunction} {$panelByte} {$checksum}";
+    }
+
+    private function buildCloseCommandFromConfig(string $functionByte, int $panelNumber): string
+    {
+        $normalizedFunction = strtoupper(str_pad($functionByte, 2, '0', STR_PAD_LEFT));
+        $panelByte = $this->formatHexByte($panelNumber);
+
+        return "68 03 08 {$normalizedFunction} {$panelByte}";
+    }
+
+    private function isRegistryAreaCabinet(Room $room, string $cabinetName): bool
+    {
+        return $room->name === self::REGISTRY_ROOM_NAME
+            && str_starts_with($cabinetName, self::REGISTRY_AREA_PREFIX);
+    }
+
+    private function shouldForceRegistryReseed(): bool
+    {
+        return filter_var(env(self::REGISTRY_FORCE_RESEED_ENV, false), FILTER_VALIDATE_BOOLEAN) === true;
     }
 }
 
