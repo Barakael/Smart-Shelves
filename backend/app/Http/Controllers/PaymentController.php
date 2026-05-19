@@ -139,7 +139,7 @@ class PaymentController extends Controller
         // Allow room operators to view their own room's payments
         $user = $request->user();
         
-        if (!$user->isAdmin() && $user->room_id !== $room->id) {
+        if (!$user->isAdmin() && !$user->canAccessRoom($room->id)) {
             return response()->json([
                 'message' => 'Unauthorized to view this room\'s payments',
             ], 403);
