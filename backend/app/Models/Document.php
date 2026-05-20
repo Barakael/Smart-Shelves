@@ -25,6 +25,11 @@ class Document extends Model
         'room_id',
         'shelf_id',
         'metadata',
+        'taken_to_name',
+        'taken_to_title',
+        'taken_destination',
+        'taken_at',
+        'taken_by_user_id',
         'file_path',
         'file_disk',
         'file_original_name',
@@ -38,6 +43,8 @@ class Document extends Model
         'row_index' => 'integer',
         'column_index' => 'integer',
         'metadata' => 'array',
+        'taken_at' => 'datetime',
+        'taken_by_user_id' => 'integer',
         'file_size' => 'integer',
         'is_active' => 'boolean',
     ];
@@ -65,6 +72,11 @@ class Document extends Model
     public function statusHistories(): HasMany
     {
         return $this->hasMany(DocumentStatusHistory::class)->orderByDesc('created_at');
+    }
+
+    public function takenBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'taken_by_user_id');
     }
 
     public function getHasFileAttribute(): bool

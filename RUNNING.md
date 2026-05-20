@@ -116,3 +116,52 @@ npm run tauri:build
 # Windows: frontend/src-tauri/target/release/bundle/msi/
 ```
 
+## Registry Seeder Verification Checklist
+
+After seeding, verify the Registry structure and commands:
+
+1. Run seed:
+   ```bash
+   cd backend
+   php artisan db:seed
+   ```
+
+2. Optional full Registry reset (forces shelf regeneration):
+   ```bash
+   cd backend
+   FORCE_REGISTRY_RESEED=true php artisan db:seed
+   ```
+
+3. Validate room/cabinet/shelf counts:
+   ```bash
+   cd backend
+   sqlite3 database/database.sqlite "
+   SELECT id, name FROM rooms WHERE name='Registry';
+   SELECT c.name, c.ip_address, c.function_byte, c.checksum_offset, c.shelf_count
+   FROM cabinets c
+   JOIN rooms r ON r.id = c.room_id
+   WHERE r.name='Registry'
+   ORDER BY c.name;
+   SELECT c.name AS cabinet, COUNT(s.id) AS shelves
+   FROM cabinets c
+   LEFT JOIN shelves s ON s.cabinet_id = c.id
+   JOIN rooms r ON r.id = c.room_id
+   WHERE r.name='Registry'
+   GROUP BY c.id, c.name
+   ORDER BY c.name;
+   "
+   ```
+
+4. Validate Area-1 command pattern:
+   ```bash
+   cd backend
+   sqlite3 database/database.sqlite "
+   SELECT shelf_number, open_command, close_command
+   FROM shelves s
+   JOIN cabinets c ON c.id = s.cabinet_id
+   JOIN rooms r ON r.id = c.room_id
+   WHERE r.name='Registry' AND c.name='Area-1'
+   ORDER BY shelf_number;
+   "
+   ```
+
