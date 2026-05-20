@@ -7,7 +7,10 @@ use App\Http\Controllers\PanelController;
 use App\Http\Controllers\CabinetController;
 use App\Http\Controllers\ActionLogController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\SubscriptionController;
+use App\Http\Controllers\PaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -16,9 +19,31 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    
+    // Accessible rooms for the current user
+    Route::get('/user/accessible-rooms', [AuthController::class, 'getAccessibleRooms']);
+    
+    // Subscription endpoints
+    Route::get('/subscription/my-status', [SubscriptionController::class, 'myStatus']);
+    Route::middleware('admin')->group(function () {
+        Route::get('/subscription/room/{room}', [SubscriptionController::class, 'roomStatus']);
+        Route::post('/subscription/create', [SubscriptionController::class, 'create']);
+    });
+    
+    // Payment endpoints
+    Route::middleware('admin')->group(function () {
+        Route::get('/payments', [PaymentController::class, 'index']);
+        Route::post('/payments', [PaymentController::class, 'store']);
+        Route::put('/payments/{payment}/confirm', [PaymentController::class, 'confirm']);
+        Route::put('/payments/{payment}/reject', [PaymentController::class, 'reject']);
+    });
+    Route::get('/payments/room/{room}', [PaymentController::class, 'roomPayments']);
 
     Route::apiResource('shelves', ShelfController::class);
     Route::apiResource('rooms', RoomController::class);
+    
+    // Room subscription status
+    Route::get('/rooms/{room}/subscription-status', [AuthController::class, 'getSubscriptionStatus']);
     
     // Cabinet routes
     Route::get('/cabinets', [CabinetController::class, 'index']);
@@ -54,8 +79,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/action-logs', [ActionLogController::class, 'index']);
     Route::get('/action-logs/{id}', [ActionLogController::class, 'show']);
 
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::put('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::put('/notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
     // Documents
     Route::get('/documents/filters', [DocumentController::class, 'filters']);
+    Route::get('/documents/reports/taken', [DocumentController::class, 'takenReport']);
+    Route::get('/documents/{document}/status-history', [DocumentController::class, 'statusHistory']);
+    Route::get('/documents/{document}/file', [DocumentController::class, 'download']);
     Route::apiResource('documents', DocumentController::class)->except(['create', 'edit']);
 });
 
