@@ -13,6 +13,11 @@ class RoomController extends Controller
 
         if ($user->isAdmin()) {
             $rooms = Room::all();
+        } elseif ($user->isManager()) {
+            $rooms = $user->rooms()->get();
+            if ($rooms->isEmpty() && $user->room_id) {
+                $rooms = Room::where('id', $user->room_id)->get();
+            }
         } else {
             // Operators only see their assigned room
             $rooms = $user->room ? collect([$user->room]) : collect([]);
@@ -23,6 +28,10 @@ class RoomController extends Controller
 
     public function store(Request $request)
     {
+        if (!$request->user()->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -38,7 +47,7 @@ class RoomController extends Controller
         $room = Room::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && $user->room_id != $room->id) {
+        if (!$user->canAccessRoom($room->id)) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -50,7 +59,7 @@ class RoomController extends Controller
         $room = Room::findOrFail($id);
         $user = $request->user();
 
-        if ($user->isOperator() && $user->room_id != $room->id) {
+        if (!$user->isAdmin()) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -59,7 +68,7 @@ class RoomController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $room->update($request->all());
+        $room->update($request->only(['name', 'description']));
 
         return response()->json($room);
     }
