@@ -5,6 +5,12 @@ import { X, ArrowUpRight } from 'lucide-react';
 import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../../types/documents';
 import { statusLabels, statusStyles } from './statusConfig';
 
+type TakeStatusPayload = {
+  taken_to_name: string;
+  taken_to_title: string;
+  taken_destination: string;
+};
+
 const API_URL = getApiUrl();
 
 interface DocumentDetailModalProps {
@@ -17,7 +23,7 @@ interface DocumentDetailModalProps {
   isShelfOpening: boolean;
   onShelfOpen: () => void;
   onDownloadPdf: () => void;
-  onStatusChange: (status: DocumentStatus) => void;
+  onStatusChange: (status: DocumentStatus, payload?: TakeStatusPayload) => void;
   isStatusUpdating: boolean;
   statusHistory: DocumentStatusHistoryEntry[];
   isHistoryLoading: boolean;
@@ -55,6 +61,12 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isTakePopupOpen, setIsTakePopupOpen] = useState(false);
+  const [takeForm, setTakeForm] = useState({
+    taken_to_name: '',
+    taken_to_title: '',
+    taken_destination: '',
+  });
 
   useEffect(() => {
     if (!hasFile) {
@@ -80,9 +92,9 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
           return;
         }
 
-        const blob = new Blob([response.data], {
-          type: response.headers['content-type'] || 'application/pdf',
-        });
+        const contentTypeHeader = response.headers['content-type'];
+        const mimeType = typeof contentTypeHeader === 'string' ? contentTypeHeader : 'application/pdf';
+        const blob = new Blob([response.data], { type: mimeType });
         objectUrl = URL.createObjectURL(blob);
         setPreviewUrl(objectUrl);
       } catch (error) {
@@ -106,6 +118,31 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
       }
     };
   }, [fileEndpoint, hasFile]);
+
+  const resetTakeForm = () => {
+    setTakeForm({
+      taken_to_name: document.taken_to_name || '',
+      taken_to_title: document.taken_to_title || '',
+      taken_destination: document.taken_destination || '',
+    });
+  };
+
+  const openTakePopup = () => {
+    resetTakeForm();
+    setIsTakePopupOpen(true);
+  };
+
+  const handleTakeSubmit = () => {
+    if (!takeForm.taken_to_name.trim() || !takeForm.taken_to_title.trim() || !takeForm.taken_destination.trim()) {
+      return;
+    }
+    onStatusChange('taken', {
+      taken_to_name: takeForm.taken_to_name.trim(),
+      taken_to_title: takeForm.taken_to_title.trim(),
+      taken_destination: takeForm.taken_destination.trim(),
+    });
+    setIsTakePopupOpen(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8">
@@ -170,28 +207,36 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
             >
               <p className="text-[11px] font-semibold uppercase tracking-wide">Physical copy</p>
               <p className="mt-1.5 text-sm font-semibold leading-snug text-gray-900 dark:text-gray-100">{documentStatusSummary}</p>
+              {document.status === 'taken' && (
+                <div className="mt-2 text-xs text-gray-700 dark:text-gray-200 space-y-1">
+                  <p><strong>Taken To:</strong> {document.taken_to_name || '—'}</p>
+                  <p><strong>Cheo:</strong> {document.taken_to_title || '—'}</p>
+                  <p><strong>Destination:</strong> {document.taken_destination || '—'}</p>
+                  <p><strong>Taken At:</strong> {formatStatusTimestamp(document.taken_at || undefined)}</p>
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border border-gray-100 px-3.5 py-3 text-xs dark:border-gray-800">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status controls</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {document.status !== 'removed' ? (
+                {document.status !== 'taken' ? (
                   <button
                     type="button"
-                    onClick={() => onStatusChange('removed')}
+                    onClick={openTakePopup}
                     disabled={isStatusUpdating}
                     className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
                   >
-                    Mark as Removed
+                    Take
                   </button>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => onStatusChange('available')}
+                    onClick={() => onStatusChange('returned')}
                     disabled={isStatusUpdating}
                     className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
                   >
-                    Mark as Available
+                    Mark as Returned
                   </button>
                 )}
               </div>
@@ -292,6 +337,62 @@ const DocumentDetailModal: React.FC<DocumentDetailModalProps> = ({
           </section>
         </div>
       </div>
+      {isTakePopupOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Take Document</h3>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              Capture who is taking this document and where it is going.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Name</label>
+                <input
+                  type="text"
+                  value={takeForm.taken_to_name}
+                  onChange={(event) => setTakeForm(prev => ({ ...prev, taken_to_name: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cheo</label>
+                <input
+                  type="text"
+                  value={takeForm.taken_to_title}
+                  onChange={(event) => setTakeForm(prev => ({ ...prev, taken_to_title: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Destination</label>
+                <input
+                  type="text"
+                  value={takeForm.taken_destination}
+                  onChange={(event) => setTakeForm(prev => ({ ...prev, taken_destination: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsTakePopupOpen(false)}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleTakeSubmit}
+                disabled={!takeForm.taken_to_name.trim() || !takeForm.taken_to_title.trim() || !takeForm.taken_destination.trim() || isStatusUpdating}
+                className="rounded-lg bg-[#012169] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                Save Take Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Download, Filter, FileArchive, Paperclip, PlusCircle, RefreshCw, Search, Trash2, UploadCloud, X } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { DocumentRecord, DocumentStatus, DocumentStatusHistoryEntry } from '../types/documents';
 import { DocumentPageMeta, DocumentQueryState, FiltersResponse } from '../types/documentsPage';
 import DocumentFiltersPanel from '../components/documents/DocumentFiltersPanel';
@@ -35,6 +37,23 @@ const TEMPLATE_SAMPLE_ROWS = [
 type PreparedDocumentPayload = {
   data: Record<string, any>;
   rowNumber: number;
+};
+
+type TakeStatusPayload = {
+  taken_to_name: string;
+  taken_to_title: string;
+  taken_destination: string;
+};
+
+type TakenReportResponse = {
+  summary: {
+    total_documents: number;
+    available: number;
+    taken: number;
+    returned: number;
+    inactive: number;
+  };
+  taken_documents: ApiDocumentRecord[];
 };
 
 interface PaginatedResponse<T> {
@@ -132,6 +151,15 @@ const Documents: React.FC = () => {
   const [modalSuccess, setModalSuccess] = useState<string | null>(null);
   const [isShelfOpening, setIsShelfOpening] = useState(false);
   const [isStatusUpdating, setIsStatusUpdating] = useState(false);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [takenReport, setTakenReport] = useState<DocumentRecord[]>([]);
+  const [reportSummary, setReportSummary] = useState({
+    total_documents: 0,
+    available: 0,
+    taken: 0,
+    returned: 0,
+    inactive: 0,
+  });
   const isBulkServiceEnabled = Boolean(BULK_API_URL);
 
   const normalizeDocument = useCallback((record: ApiDocumentRecord): DocumentRecord => {
@@ -209,6 +237,32 @@ const Documents: React.FC = () => {
     }
   }, []);
 
+  const fetchTakenReport = useCallback(async () => {
+    const params: Record<string, string> = {};
+    if (query.from_date) params.from_date = query.from_date;
+    if (query.to_date) params.to_date = query.to_date;
+    if (query.search) params.search = query.search;
+
+    try {
+      setIsReportLoading(true);
+      const { data } = await axios.get<TakenReportResponse>(`${API_URL}/documents/reports/taken`, { params });
+      setReportSummary(data.summary);
+      setTakenReport((data.taken_documents ?? []).map(normalizeDocument));
+    } catch (err) {
+      console.error('Failed to load taken report', err);
+      setTakenReport([]);
+      setReportSummary({
+        total_documents: 0,
+        available: 0,
+        taken: 0,
+        returned: 0,
+        inactive: 0,
+      });
+    } finally {
+      setIsReportLoading(false);
+    }
+  }, [normalizeDocument, query.from_date, query.to_date, query.search]);
+
   const handleFilterChange = useCallback((updates: Partial<DocumentQueryState>) => {
     setQuery(prev => {
       const next = { ...prev, ...updates };
@@ -235,6 +289,10 @@ const Documents: React.FC = () => {
   useEffect(() => {
     fetchFilters();
   }, [fetchFilters]);
+
+  useEffect(() => {
+    fetchTakenReport();
+  }, [fetchTakenReport]);
 
   useEffect(() => {
     if (!isCreateModalOpen) {
@@ -373,7 +431,7 @@ const Documents: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (status: DocumentStatus) => {
+  const handleStatusChange = async (status: DocumentStatus, payload?: TakeStatusPayload) => {
     if (!selectedDocument) return;
 
     setIsStatusUpdating(true);
@@ -381,12 +439,20 @@ const Documents: React.FC = () => {
     setModalSuccess(null);
 
     try {
-      const { data } = await axios.put(`${API_URL}/documents/${selectedDocument.id}`, { status });
+      const requestPayload: Record<string, any> = { status };
+      if (status === 'taken' && payload) {
+        requestPayload.taken_to_name = payload.taken_to_name;
+        requestPayload.taken_to_title = payload.taken_to_title;
+        requestPayload.taken_destination = payload.taken_destination;
+      }
+
+      const { data } = await axios.put(`${API_URL}/documents/${selectedDocument.id}`, requestPayload);
       const normalized = normalizeDocument(data);
       setDocuments(prev => prev.map(doc => (doc.id === normalized.id ? normalized : doc)));
       setSelectedDocument(normalized);
       setModalSuccess(`Status updated to ${statusLabels[status]}.`);
       await fetchStatusHistory(normalized.id);
+      await fetchTakenReport();
     } catch (err: any) {
       const message = err?.response?.data?.message || 'Unable to update status.';
       setModalError(message);
@@ -438,7 +504,7 @@ const Documents: React.FC = () => {
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([fetchDocuments(), fetchFilters()]);
+    await Promise.all([fetchDocuments(), fetchFilters(), fetchTakenReport()]);
     setIsRefreshing(false);
   };
 
@@ -767,6 +833,53 @@ const Documents: React.FC = () => {
     }
   };
 
+  const handleExportTakenPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape' });
+    const generatedAt = new Date().toLocaleString();
+
+    doc.setFontSize(14);
+    doc.text('Taken Documents Report', 14, 14);
+    doc.setFontSize(10);
+    doc.text(`Generated: ${generatedAt}`, 14, 20);
+
+    const body = takenReport.map(item => ([
+      item.reference || '—',
+      item.name || '—',
+      item.cabinet?.name || '—',
+      item.shelf || item.shelfMeta?.name || '—',
+      item.docket ?? '—',
+      item.row ?? item.row_index ?? '—',
+      item.column ?? item.column_index ?? '—',
+      item.taken_to_name || '—',
+      item.taken_to_title || '—',
+      item.taken_destination || '—',
+      item.taken_at ? formatStatusTimestamp(item.taken_at) : '—',
+    ]));
+
+    autoTable(doc, {
+      startY: 24,
+      head: [[
+        'Reference',
+        'Name',
+        'Cabinet',
+        'Shelf',
+        'Docket',
+        'Row',
+        'Column',
+        'Taken To',
+        'Cheo',
+        'Destination',
+        'Taken At',
+      ]],
+      body,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [1, 33, 105] },
+      margin: { left: 8, right: 8 },
+    });
+
+    doc.save(`taken-documents-${Date.now()}.pdf`);
+  };
+
   const formatDate = (value?: string) => {
     if (!value) return '—';
     return new Date(value).toLocaleString();
@@ -789,20 +902,20 @@ const Documents: React.FC = () => {
   const isEditingExistingDocument = Boolean(editingDocument);
   const submitLabel = isEditingExistingDocument ? 'Update Document' : 'Save Document';
   const submittingLabel = isEditingExistingDocument ? 'Updating…' : 'Saving…';
-  const isDocumentUnavailable = selectedDocument ? ['removed', 'taken'].includes(selectedDocument.status) : false;
-  const latestRemovalEntry = statusHistory.find(entry => entry.status === 'removed');
-  const removalSummary = latestRemovalEntry
-    ? `${statusLabels[latestRemovalEntry.status]} ${formatStatusTimestamp(latestRemovalEntry.created_at)}${
-        latestRemovalEntry.user ? ` by ${latestRemovalEntry.user.name}` : ''
-      }${latestRemovalEntry.note ? ` • ${latestRemovalEntry.note}` : ''}`
-    : 'status marked as removed';
+  const isDocumentUnavailable = selectedDocument ? selectedDocument.status === 'taken' : false;
+  const latestTakenEntry = statusHistory.find(entry => entry.status === 'taken');
+  const takenSummary = latestTakenEntry
+    ? `${statusLabels[latestTakenEntry.status]} ${formatStatusTimestamp(latestTakenEntry.created_at)}${
+        latestTakenEntry.user ? ` by ${latestTakenEntry.user.name}` : ''
+      }${latestTakenEntry.note ? ` • ${latestTakenEntry.note}` : ''}`
+    : 'status marked as taken';
   const canOpenShelf = Boolean(
     selectedDocument?.cabinet?.id &&
       selectedDocument?.shelfMeta?.id &&
       !isDocumentUnavailable
   );
   const documentStatusSummary = isDocumentUnavailable
-    ? `Physical copy is currently out of the shelf (${removalSummary}).`
+    ? `Physical copy is currently out of the shelf (${takenSummary}).`
     : 'Physical copy is available for retrieval.';
 
   return (
@@ -869,6 +982,89 @@ const Documents: React.FC = () => {
           {successMessage}
         </div>
       )}
+
+      <div className="grid gap-3 md:grid-cols-5">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
+          <p className="text-xs text-gray-500">Total</p>
+          <p className="text-xl font-semibold text-gray-900 dark:text-gray-100">{reportSummary.total_documents}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/80 dark:bg-emerald-900/20 p-3">
+          <p className="text-xs text-emerald-700 dark:text-emerald-300">Available</p>
+          <p className="text-xl font-semibold text-emerald-900 dark:text-emerald-100">{reportSummary.available}</p>
+        </div>
+        <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/80 dark:bg-amber-900/20 p-3">
+          <p className="text-xs text-amber-700 dark:text-amber-300">Taken</p>
+          <p className="text-xl font-semibold text-amber-900 dark:text-amber-100">{reportSummary.taken}</p>
+        </div>
+        <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/80 dark:bg-blue-900/20 p-3">
+          <p className="text-xs text-blue-700 dark:text-blue-300">Returned</p>
+          <p className="text-xl font-semibold text-blue-900 dark:text-blue-100">{reportSummary.returned}</p>
+        </div>
+        <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 p-3">
+          <p className="text-xs text-gray-600 dark:text-gray-400">Inactive</p>
+          <p className="text-xl font-semibold text-gray-800 dark:text-gray-100">{reportSummary.inactive}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Taken Documents Report</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Tracks who took each document, their cheo, destination, and location.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleExportTakenPdf}
+            disabled={takenReport.length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#012169] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Export Taken PDF
+          </button>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          {isReportLoading ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading taken report...</p>
+          ) : takenReport.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No taken documents found for current filters.</p>
+          ) : (
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                  <th className="py-2 pr-3">Reference</th>
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Shelf</th>
+                  <th className="py-2 pr-3">Docket</th>
+                  <th className="py-2 pr-3">Row</th>
+                  <th className="py-2 pr-3">Column</th>
+                  <th className="py-2 pr-3">Taken To</th>
+                  <th className="py-2 pr-3">Cheo</th>
+                  <th className="py-2 pr-3">Destination</th>
+                  <th className="py-2 pr-3">Taken At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {takenReport.map(item => (
+                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800">
+                    <td className="py-2 pr-3">{item.reference}</td>
+                    <td className="py-2 pr-3">{item.name}</td>
+                    <td className="py-2 pr-3">{item.shelf || item.shelfMeta?.name || '—'}</td>
+                    <td className="py-2 pr-3">{item.docket ?? '—'}</td>
+                    <td className="py-2 pr-3">{item.row ?? item.row_index ?? '—'}</td>
+                    <td className="py-2 pr-3">{item.column ?? item.column_index ?? '—'}</td>
+                    <td className="py-2 pr-3">{item.taken_to_name || '—'}</td>
+                    <td className="py-2 pr-3">{item.taken_to_title || '—'}</td>
+                    <td className="py-2 pr-3">{item.taken_destination || '—'}</td>
+                    <td className="py-2 pr-3">{item.taken_at ? formatStatusTimestamp(item.taken_at) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
@@ -1026,7 +1222,7 @@ const Documents: React.FC = () => {
                     )}
                     {createForm.cabinet_id && createShelfOptions.length > 0 && (
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Excel mapping: Panel label (e.g., <code>Area-1 Panel 3</code>) maps to Shelf.
+                        Excel mapping: Panel label (e.g., <code>panel-3</code>) maps to Shelf.
                       </p>
                     )}
                   </div>
@@ -1153,7 +1349,7 @@ const Documents: React.FC = () => {
                   <p className="font-semibold">Registry naming helper</p>
                   <p className="mt-1">
                     Use cabinet names exactly like <code>Area-1</code> ... <code>Area-4</code>, and shelf names like
-                    <code> Area-1 Panel 1</code> ... <code>Area-4 Panel 10</code>.
+                    <code> panel-1</code> ... <code>panel-11</code> (depending on the selected area).
                   </p>
                   <p className="mt-1">
                     Keep <code>docket</code>, <code>row</code>, and <code>column</code> for precise location indexing.

@@ -20,6 +20,11 @@ export interface DocumentRecord {
   row_index?: number | null;
   column_index?: number | null;
   metadata?: Record<string, unknown> | null;
+  taken_to_name?: string | null;
+  taken_to_title?: string | null;
+  taken_destination?: string | null;
+  taken_at?: string | null;
+  taken_by_user_id?: number | null;
   file_url?: string | null;
   file_original_name?: string | null;
   has_file?: boolean;
