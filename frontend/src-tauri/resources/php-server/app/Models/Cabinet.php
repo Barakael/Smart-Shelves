@@ -29,6 +29,7 @@ class Cabinet extends Model
         'macro_vent_command',
         'room_id',
         'is_active',
+        'is_sensitive',
     ];
 
     /**
@@ -38,6 +39,7 @@ class Cabinet extends Model
      */
     protected $casts = [
         'is_active' => 'boolean',
+        'is_sensitive' => 'boolean',
         'port' => 'integer',
         'checksum_offset' => 'integer',
         'shelf_count' => 'integer',
