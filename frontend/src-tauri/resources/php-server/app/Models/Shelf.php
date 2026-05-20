@@ -15,6 +15,7 @@ class Shelf extends Model
         'rows',
         'columns',
         'controller',
+        'gpio_pin',
         'room_id',
         'panel_id',
         'cabinet_id',
@@ -38,6 +39,7 @@ class Shelf extends Model
         'row_index' => 'integer',
         'column_index' => 'integer',
         'shelf_number' => 'integer',
+        'gpio_pin' => 'integer',
         'open_command' => 'string',
         'close_command' => 'string',
     ];
