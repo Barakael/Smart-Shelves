@@ -9,13 +9,16 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "prepare:desktop-backend": "node scripts/sync-desktop-backend.mjs",
+    "tauri:build": "npm run prepare:desktop-backend && tauri build",
     "desktop": "tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.1",
     "axios": "^1.6.2",
     "framer-motion": "^10.16.16",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
