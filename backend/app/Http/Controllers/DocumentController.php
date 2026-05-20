@@ -21,7 +21,7 @@ class DocumentController extends Controller
     {
         $user = $request->user()->loadMissing('rooms');
 
-        $query = Document::with(['cabinet', 'shelf', 'room'])
+        $query = Document::with(['cabinet', 'shelf', 'room', 'takenBy:id,name'])
             ->orderByDesc('updated_at');
 
         $includeInactive = filter_var($request->get('include_inactive', false), FILTER_VALIDATE_BOOLEAN);
@@ -91,14 +91,18 @@ class DocumentController extends Controller
         $this->enforceShelfOwnership($data, $cabinet);
         $data['room_id'] = $cabinet->room_id;
         $data['status'] = $data['status'] ?? 'available';
+        $this->applyTakeMetadata($data, $request, null);
 
         $fileAttributes = $this->handlePdfUpload($request);
 
         $document = Document::create(array_merge($data, $fileAttributes));
 
-        $this->recordStatusHistory($document, $document->status, $request->user()?->id, 'Document created');
+        $statusNote = $document->status === 'taken'
+            ? $this->buildTakenNote($document, 'Document taken')
+            : 'Document created';
+        $this->recordStatusHistory($document, $document->status, $request->user()?->id, $statusNote);
 
-        return response()->json($document->load(['cabinet', 'shelf', 'room']), 201);
+        return response()->json($document->load(['cabinet', 'shelf', 'room', 'takenBy:id,name']), 201);
     }
 
     public function show(Request $request, Document $document)
@@ -107,7 +111,7 @@ class DocumentController extends Controller
             return $response;
         }
 
-        return response()->json($document->load(['cabinet', 'shelf', 'room']));
+        return response()->json($document->load(['cabinet', 'shelf', 'room', 'takenBy:id,name']));
     }
 
     public function update(Request $request, Document $document)
@@ -124,6 +128,7 @@ class DocumentController extends Controller
         $data['room_id'] = $cabinet->room_id;
         $data['status'] = $data['status'] ?? $document->status;
         $data['is_active'] = array_key_exists('is_active', $data) ? (bool) $data['is_active'] : $document->is_active;
+        $this->applyTakeMetadata($data, $request, $document);
 
         $fileAttributes = $this->handlePdfUpload($request, $document);
 
@@ -133,10 +138,13 @@ class DocumentController extends Controller
         $document->refresh();
 
         if ($originalStatus !== $document->status) {
-            $this->recordStatusHistory($document, $document->status, $request->user()?->id);
+            $statusNote = $document->status === 'taken'
+                ? $this->buildTakenNote($document, 'Document taken')
+                : null;
+            $this->recordStatusHistory($document, $document->status, $request->user()?->id, $statusNote);
         }
 
-        return response()->json($document->load(['cabinet', 'shelf', 'room']));
+        return response()->json($document->load(['cabinet', 'shelf', 'room', 'takenBy:id,name']));
     }
 
     public function destroy(Request $request, Document $document)
@@ -184,6 +192,86 @@ class DocumentController extends Controller
             'rooms' => $rooms,
             'cabinets' => $cabinets,
             'statuses' => self::STATUSES,
+        ]);
+    }
+
+    public function takenReport(Request $request): JsonResponse
+    {
+        $user = $request->user()->loadMissing('rooms');
+        $query = Document::query()
+            ->with(['cabinet:id,name', 'shelf:id,name', 'room:id,name', 'takenBy:id,name'])
+            ->where('is_active', true);
+
+        if (!$user->isAdmin()) {
+            $roomIds = collect($user->accessibleRoomIds());
+            if ($roomIds->isEmpty()) {
+                return response()->json([
+                    'summary' => [
+                        'total_documents' => 0,
+                        'available' => 0,
+                        'taken' => 0,
+                        'returned' => 0,
+                        'inactive' => 0,
+                    ],
+                    'taken_documents' => [],
+                ]);
+            }
+            $query->whereIn('room_id', $roomIds);
+        }
+
+        if ($request->filled('room_id')) {
+            $roomId = (int) $request->room_id;
+            if ($response = $this->guardRoomAccess($request, $roomId)) {
+                return $response;
+            }
+            $query->where('room_id', $roomId);
+        }
+
+        if ($request->filled('from_date')) {
+            $query->whereDate('updated_at', '>=', $request->from_date);
+        }
+
+        if ($request->filled('to_date')) {
+            $query->whereDate('updated_at', '<=', $request->to_date);
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($subQuery) use ($search) {
+                $subQuery->where('reference', 'like', "%{$search}%")
+                    ->orWhere('name', 'like', "%{$search}%")
+                    ->orWhere('taken_to_name', 'like', "%{$search}%")
+                    ->orWhere('taken_to_title', 'like', "%{$search}%")
+                    ->orWhere('taken_destination', 'like', "%{$search}%");
+            });
+        }
+
+        $baseQuery = clone $query;
+        $takenDocuments = (clone $baseQuery)
+            ->where('status', 'taken')
+            ->orderByDesc('taken_at')
+            ->orderByDesc('updated_at')
+            ->get();
+
+        $inactiveQuery = Document::query()->where('is_active', false);
+        if (!$user->isAdmin()) {
+            $inactiveQuery->whereIn('room_id', collect($user->accessibleRoomIds()));
+        }
+        if ($request->filled('room_id')) {
+            $inactiveQuery->where('room_id', (int) $request->room_id);
+        }
+
+        $summary = [
+            'total_documents' => (clone $baseQuery)->count(),
+            'available' => (clone $baseQuery)->where('status', 'available')->count(),
+            'taken' => $takenDocuments->count(),
+            'returned' => (clone $baseQuery)->where('status', 'returned')->count(),
+            'inactive' => $inactiveQuery->count(),
+        ];
+
+        return response()->json([
+            'summary' => $summary,
+            'taken_documents' => $takenDocuments,
         ]);
     }
 
@@ -265,6 +353,9 @@ class DocumentController extends Controller
             'metadata' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
             'pdf' => ['nullable', 'file', 'mimetypes:application/pdf'],
+            'taken_to_name' => ['nullable', 'string', 'max:255'],
+            'taken_to_title' => ['nullable', 'string', 'max:255'],
+            'taken_destination' => ['nullable', 'string', 'max:255'],
         ];
 
         $data = $request->validate($rules);
@@ -366,5 +457,44 @@ class DocumentController extends Controller
             'status' => $status,
             'note' => $note,
         ]);
+    }
+
+    private function applyTakeMetadata(array &$data, Request $request, ?Document $existingDocument): void
+    {
+        $newStatus = $data['status'] ?? $existingDocument?->status;
+        if ($newStatus !== 'taken') {
+            return;
+        }
+
+        $takenToName = $data['taken_to_name'] ?? $existingDocument?->taken_to_name;
+        $takenToTitle = $data['taken_to_title'] ?? $existingDocument?->taken_to_title;
+        $takenDestination = $data['taken_destination'] ?? $existingDocument?->taken_destination;
+
+        if (!$takenToName || !$takenToTitle || !$takenDestination) {
+            throw ValidationException::withMessages([
+                'taken_to_name' => ['Name is required when taking a document.'],
+                'taken_to_title' => ['Cheo/title is required when taking a document.'],
+                'taken_destination' => ['Destination is required when taking a document.'],
+            ]);
+        }
+
+        $data['taken_to_name'] = trim((string) $takenToName);
+        $data['taken_to_title'] = trim((string) $takenToTitle);
+        $data['taken_destination'] = trim((string) $takenDestination);
+        $data['taken_at'] = $existingDocument?->status === 'taken' && $existingDocument?->taken_at
+            ? $existingDocument->taken_at
+            : now();
+        $data['taken_by_user_id'] = $request->user()?->id;
+    }
+
+    private function buildTakenNote(Document $document, string $prefix = 'Document taken'): string
+    {
+        return sprintf(
+            '%s by %s (%s) to %s',
+            $prefix,
+            $document->taken_to_name ?: 'unknown',
+            $document->taken_to_title ?: 'unknown',
+            $document->taken_destination ?: 'unknown'
+        );
     }
 }
