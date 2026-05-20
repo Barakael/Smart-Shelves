@@ -7,6 +7,7 @@ use App\Models\Room;
 use App\Models\Shelf;
 use App\Models\ActionLog;
 use App\Services\CabinetSocketService;
+use App\Services\SensitiveCabinetNotificationService;
 use App\Support\HexCommandFormatter;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -19,15 +20,25 @@ use Exception;
 class CabinetController extends Controller
 {
     /**
-     * Get all cabinets (admin only).
+     * Get cabinets, filtered by room for operators.
      */
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Cabinet::class);
 
-        $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
-            ->orderBy('name')
-            ->get();
+        $user = $request->user();
+
+        if ($user->isAdmin()) {
+            $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
+                ->orderBy('name')
+                ->get();
+        } else {
+            $roomIds = $user->accessibleRoomIds();
+            $cabinets = Cabinet::with(['room', 'shelves' => fn ($query) => $query->orderBy('column_index')])
+                ->whereIn('room_id', $roomIds)
+                ->orderBy('name')
+                ->get();
+        }
 
         return response()->json($cabinets);
     }
@@ -66,6 +77,7 @@ class CabinetController extends Controller
             'controller_row' => 'nullable|integer|min:0',
             'controller_column' => 'nullable|integer|min:0',
             'room_id' => 'required|exists:rooms,id',
+            'is_sensitive' => 'sometimes|boolean',
             'macro_close_command' => 'nullable|string',
             'macro_lock_command' => 'nullable|string',
             'macro_vent_command' => 'nullable|string',
@@ -121,6 +133,7 @@ class CabinetController extends Controller
             'checksum_offset' => 'sometimes|integer|between:0,255',
             'is_active' => 'sometimes|boolean',
             'room_id' => 'sometimes|exists:rooms,id',
+            'is_sensitive' => 'sometimes|boolean',
             'shelf_count' => 'sometimes|integer|min:1|max:50',
             'total_rows' => 'sometimes|integer|min:1|max:20',
             'total_columns' => 'sometimes|integer|min:1|max:20',
@@ -264,6 +277,8 @@ class CabinetController extends Controller
         }
 
         $shelf->update(['is_open' => true]);
+
+        app(SensitiveCabinetNotificationService::class)->notifyShelfOpened($cabinet, $shelf, $request->user());
 
         $this->logShelfAction($request->user()->id, $cabinet, $shelf, 'open_shelf', [
             'hex_command' => $shelf->open_command,
