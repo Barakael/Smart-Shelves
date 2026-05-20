@@ -3,6 +3,21 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0"
 
+set PHP_BIN=%~1
+if "%PHP_BIN%"=="" (
+    set BUNDLED_PHP=%~dp0..\php\php.exe
+    if exist "%BUNDLED_PHP%" (
+        set PHP_BIN=%BUNDLED_PHP%
+    ) else (
+        for %%I in (php.exe) do set PHP_BIN=%%~$PATH:I
+    )
+)
+
+if "%PHP_BIN%"=="" (
+    echo PHP binary not found for database initialization.
+    exit /b 2
+)
+
 echo Initializing Smart Shelves Database...
 
 REM Ensure database directory exists
@@ -33,10 +48,12 @@ REM Create new database file
 type nul > "%DB_FILE%"
 
 echo Running migrations...
-php artisan migrate:fresh --force
+"%PHP_BIN%" artisan migrate:fresh --force
+if errorlevel 1 exit /b %errorlevel%
 
 echo Seeding database...
-php artisan db:seed --force
+"%PHP_BIN%" artisan db:seed --force
+if errorlevel 1 exit /b %errorlevel%
 
 REM Mark as initialized
 type nul > "%INIT_MARKER%"
